@@ -3,10 +3,12 @@
 use warnings;
 use strict;
 use Aptovision_API;
+use Data::Dumper ();
 
 my $device = 'd880399acbf4';
 my $host = '169.254.45.84';
 my $port = 6970;
+my $debug = 1;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
@@ -14,30 +16,91 @@ my $apto = new Aptovision_API( { Timeout => 10,
 				 Host => $host,
 				 Port => $port,
 				 JSON_Template => $json_template,
-				 Debug => 1,
+				 Debug => $debug,
 			       } );
 
-push @output, $apto->send( "require blueriver_api 2.5.99" );
-push @output, $apto->send( "require multiview 1.1.0" );
-push @output, $apto->send( "mode async off" );
-push @output, $apto->send( "get all hello" );
-push @output, $apto->send( "event" );
-push @output, $apto->send( "event" );
-push @output, $apto->send( "event" );
+# More init for RS-232 access to add-in card.
+$apto->send( "switch $device:RS232:1 $host" );
+pop @{$apto->Results}; # Discard.
+$apto->send( "set $device property nodes[UART:1].configuration.baud_rate 9600" );
+pop @{$apto->Results}; # Discard.
 
-print "== Done with init...\n\n";
-print join "\n\n", @output;
+sleep 1;
+
+while( keys %{$apto->Requests} ) {
+    foreach my $request (sort keys %{$apto->Requests}) {
+	print "Fetching request $request.\n";
+	$apto->send( "request $request" );
+	pop @{$apto->Results}; # Discard.
+    }
+}
+
+# Send first UART command
+$apto->send( "send $device RS232:1 IP" );
+
+sleep 1;
+
+while( keys %{$apto->Requests} ) {
+    foreach my $request (sort keys %{$apto->Requests}) {
+	print "Fetching request $request.\n";
+	$apto->send( "request $request" );
+	pop @{$apto->Results}; # Discard.
+    }
+}
+
+while( my $new_events = $apto->poll() ) {
+    print "Got $new_events new events.  All: ".
+	#	join " ", sort keys $apto->Events
+	""
+	."\n";
+    sleep 1;
+}
+
+print "== Done with requests...\n\n";
+print "== How is the object doing?...\n\n";
+print Data::Dumper->Dump([ $apto ]);
+print "\n\n";
+
+
+while( my $new_events = $apto->poll() ) {
+    print "Got $new_events new events.  All: ".
+	#	join " ", sort keys $apto->Events
+	""
+	."\n";
+    sleep 0.5;
+}
+
+foreach my $request (sort keys %{$apto->Requests}) {
+    print "Fetching request $request.\n";
+    $apto->send( "request $request" );
+}
+
+print "== Done with requests...\n\n";
+print "== How is the object doing?...\n\n";
+print Data::Dumper->Dump([ $apto ]);
+print "\n\n";
+
+
+$apto->close();
+exit 0;
+
+# push @output, $apto->send( "get all hello" );
+# push @output, $apto->send( "event" );
+# push @output, $apto->send( "event" );
+
+print "== Done with hello...\n\n";
+print Data::Dumper->Dump(\@output);
+print "\n\n";
+
+print "== How is the object doing?...\n\n";
+print Data::Dumper->Dump([ $apto ]);
 print "\n\n";
 
 @output = ();
 
-# More init for RS-232 access to add-in card.
-push @output, $apto->send( "switch $device:RS232:1 $host" );
-push @output, $apto->send( "set $device property nodes[UART:1].configuration.baud_rate 9600" );
-
 # Get GPIO
 push @output, $apto->send( "send $device RS232:1 IP" );
-# request
+#request
 
 # Dump internal registers
 push @output, $apto->send( "send $device RS232:1 R\\x00\\x01\\x02\\x03\\x04\\x05\\x06\\x07\\x08\\x09\\x0aP" );
@@ -55,7 +118,11 @@ push @output, $apto->send( "send $device RS232:1 S\\x4d\\x02P" );
 # request 
 
 print "== Done with bunch of commands; no responses yet...\n\n";
-print join "\n\n", @output;
+print Data::Dumper->Dump(\@output);
+print "\n\n";
+
+print "== How is the object doing?...\n\n";
+print Data::Dumper->Dump([ $apto ]);
 print "\n\n";
 
 

@@ -1,19 +1,27 @@
+# Perl module for speaking to Aptovision API
 package Aptovision_API;
 use Class::Accessor "antlers";
 
 use warnings;
 use strict;
-use Net::Telnet;
+use Net::Telnet ();
+use JSON ();
+use Data::Dumper ();
 
 has Host => ( is => "ro" );
 has Port => ( is => "ro" );
 has Timeout => ( is => "ro" );
 has Debug => ( is => "ro" );
 has Telnet => ( is => "rw" );
-has Output => ( is => "rw" );
+has JSON => ( is => "rw" );
+has Requests => ( is => "rw" );
+has Events => ( is => "rw" );
+has Last_Event => ( is => "rw" );
+has Results => ( is => "rw" );
 has JSON_Template => ( is => "rw" );
 
 
+# Constructor for Aptovision_API object.
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
@@ -38,7 +46,16 @@ sub new($\%) {
 						Host => $arg_ref->{'Host'},
 						Port => $arg_ref->{'Port'});
     }
+    unless( exists $arg_ref->{'JSON'} ) {
+	$arg_ref->{'JSON'} = new JSON ();
+	$arg_ref->{'JSON'}->utf8();
+    }
 
+    $arg_ref->{'Requests'} = {};
+    $arg_ref->{'Events'} = {};
+    $arg_ref->{'Results'} = [];
+    $arg_ref->{'Last_Event'} = -1;
+    
     my $self = $class->SUPER::new( $arg_ref );
     
     $self->Telnet->open()
@@ -47,19 +64,51 @@ sub new($\%) {
     $self->Telnet->dump_log("telnet_debug.log")
 	if( $self->Debug >= 1 );
 
+    $self->initialize();
+    
     return $self;
 }
 
+
+# Initialize connection for sanity.
+sub initialize($) {
+    my $self = shift;
+
+    $self->send( "require blueriver_api 2.8.0" );
+    pop @{$self->Results}; # Discard.
+    $self->send( "require multiview 1.1.0" );
+    pop @{$self->Results}; # Discard.
+    $self->send( "mode async off" );
+    pop @{$self->Results}; # Discard.
+
+    return;
+}
+
+
+# Sends a command and consumes its output.
 sub send($$) {
     my $self = shift;
     my $cmd = shift;
     
     my $previous;
     my $match;
+    my $JSRef;
 
     $self->Telnet->print( "$cmd" )
 	|| die "Error sending command: $cmd";
     
+    return $self->expect($cmd);
+}
+
+# Expects response to a command and consumes it into appropriate structure.
+sub expect($$) {
+    my $self = shift;
+    my $cmd = shift;
+    
+    my $previous;
+    my $match;
+    my $JSRef;
+
     ($previous ,$match) = $self->Telnet->waitfor($self->JSON_Template);
 
     chomp $previous;
@@ -73,9 +122,84 @@ sub send($$) {
     die "Unexpected embedded line feed received: '$match'"
 	if($match =~ /\n/);
 
-    return $match;
+    $JSRef = $self->JSON->decode($match);
+
+    my $unexpected = "";
+    if( ($JSRef->{'status'} eq "SUCCESS") ) {
+	if( defined($JSRef->{'error'}) ) {
+	    $unexpected .= "SUCCESS status with 'error' defined.\n";
+	}
+	if( defined($JSRef->{'request_id'}) ) {
+	    if( exists($self->{'Requests'}->{"$JSRef->{'request_id'}"}) ) {	
+		# This must be a response to an earlier request; take off the
+		# pending requests hash and record the result.
+		delete $self->{'Requests'}->{"$JSRef->{'request_id'}"};
+ 	    } else {
+		# If we didn't know about this request, it's unexpected.
+		$unexpected .= "SUCCESS status with unrecognized 'request_id'.\n";
+	    }
+	}
+	push @{$self->{'Results'}}, $JSRef->{'result'};
+    } elsif($JSRef->{'status'} eq "PROCESSING") {
+	if( defined($JSRef->{'error'}) ) {
+	    $unexpected .= "PROCESSING status with 'error' defined.\n";
+	}
+	if( defined($JSRef->{'result'}) ) {
+	    $unexpected .= "PROCESSING status with 'result' defined.\n";
+	}
+	$self->{'Requests'}->{"$JSRef->{'request_id'}"} = "$cmd";
+    } else {
+	$unexpected .= "Unimplemented status '".$JSRef->{'status'}."' received.\n";
+    }
+    
+    if( $unexpected ) {
+	my $dumpstring = Data::Dumper->Dump([$JSRef], ["JSRef"]);
+	die "Got an unexpected response on command: $cmd\n"
+	    ."Unexpected: $unexpected"
+	    ."Result:\n${dumpstring}"
+	    ."Buh bye!"
+    }
+
+    return $JSRef;
 }
 
+
+# Poll for events and consume
+sub poll($) {
+    my $self = shift;
+    my $JSRef = undef;
+    my $new_events = 0;
+    
+    if( $self->Last_Event < 0 ) {
+	$self->send("event");
+    } else {
+	$self->send("event $self->{'Last_Event'}");
+    }
+
+    $JSRef = pop @{$self->Results};
+    
+    die "Unexpected event response."
+	unless( exists( $JSRef->{'events'} ) );
+
+    foreach my $event (@{$JSRef->{'events'}}) {
+	die "Event_ID wrapped from large integer.  I don't know how to deal with that."
+	    if( $event->{'event_id'} < ($self->Last_Event - 4096) );
+	
+	$self->Last_Event($event->{'event_id'})
+	    if( $event->{'event_id'} > $self->Last_Event );
+	
+	unless( exists( $self->{'Events'}->{$event->{'event_id'}} ) ) {
+	    # Only if we aren't aware of this event yet.
+	    $self->{'Events'}->{$event->{'event_id'}} = $event;
+	    $new_events++;
+	}
+    }
+
+    return $new_events;
+}
+
+
+# Close Telnet connection to Aptovision API server.
 sub close($) {
     my $self = shift;
     $self->Telnet->close();
@@ -85,5 +209,13 @@ sub close($) {
 __END__
 
 
-# CLEAN UP AUTOMATICALLY on destruciton!!!
+# CLEAN UP AUTOMATICALLY on destruciton??
 $telnet->close();
+
+FIXME:
+Handle Events and clear -- e.g. request_complete
+Wait for requests to complete?  (Fence?)
+RS-232 TX/RX.
+
+Don't Fix:
+Asynchronous events.
