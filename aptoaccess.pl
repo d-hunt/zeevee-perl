@@ -2,7 +2,9 @@
 
 use warnings;
 use strict;
-use Aptovision_API;
+use ZeeVee::Aptovision_API;
+use ZeeVee::Apto_UART;
+use ZeeVee::SC18IM700;
 use Data::Dumper ();
 
 my $device = 'd880399acbf4';
@@ -12,41 +14,40 @@ my $debug = 1;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
-my $apto = new Aptovision_API( { Timeout => 10,
-				 Host => $host,
-				 Port => $port,
-				 JSON_Template => $json_template,
-				 Debug => $debug,
-			       } );
+my $apto = new ZeeVee::Aptovision_API( { Timeout => 10,
+					 Host => $host,
+					 Port => $port,
+					 JSON_Template => $json_template,
+					 Debug => $debug,
+				       } );
 
-# More init for RS-232 access to add-in card.
-$apto->send( "switch $device:RS232:1 $host" );
-pop @{$apto->Results}; # Discard.
-$apto->send( "set $device property nodes[UART:1].configuration.baud_rate 9600" );
-pop @{$apto->Results}; # Discard.
+my $uart = new ZeeVee::Apto_UART( { Device => $device,
+				    Apto => $apto,
+				    Host => $host,
+				    Timeout => 10,
+				    Debug => $debug,
+				  } );
 
-sleep 1;
+my $bridge = new ZeeVee::SC18IM700( { UART => $uart,
+				      Debug => $debug,
+				    } );
 
-while( keys %{$apto->Requests} ) {
-    foreach my $request (sort keys %{$apto->Requests}) {
-	print "Fetching request $request.\n";
-	$apto->send( "request $request" );
-	pop @{$apto->Results}; # Discard.
-    }
-}
+# Important! Before any I2C access, enable I2C bus timeout; set to ~227ms (default):
+$uart->transmit( "W\x09\x67P" );
 
-# Send first UART command
-$apto->send( "send $device RS232:1 IP" );
+# Analog add-in specific.  Set VGA_DDC_SW to output and drive high (to enable EDID access).  Leave LED (P3) OD-Low; all other ports input-only:
+$uart->transmit( "W\x02\xd5\x03\x95P" );
 
-sleep 1;
+my $gpio = $bridge->gpio([1,0,0,1,1,0,0,0]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
-while( keys %{$apto->Requests} ) {
-    foreach my $request (sort keys %{$apto->Requests}) {
-	print "Fetching request $request.\n";
-	$apto->send( "request $request" );
-	pop @{$apto->Results}; # Discard.
-    }
-}
+my $register;
+$register = $bridge->register(0x00, 0x30);
+print "Register state ".Data::Dumper->Dump([$register], ["register"]);
+
+$register = $bridge->register(0x01, 0x00);
+print "Register state ".Data::Dumper->Dump([$register], ["register"]);
+
 
 while( my $new_events = $apto->poll() ) {
     print "Got $new_events new events.  All: ".
@@ -56,7 +57,27 @@ while( my $new_events = $apto->poll() ) {
     sleep 1;
 }
 
-print "== Done with requests...\n\n";
+print "== Done with RS232 tx...\n\n";
+print "== How is the object doing?...\n\n";
+print Data::Dumper->Dump([ $apto ]);
+print "\n\n";
+
+# Send first UART command with response.
+$uart->transmit( "IP" );
+
+print "== Done with RS232 tx...\n\n";
+print "== How is the object doing?...\n\n";
+print Data::Dumper->Dump([ $apto ]);
+print "\n\n";
+
+# Get UART responses.
+for my $try (1, 2, 3, 4, 5, 6) {
+    my $rxstring = $uart->receive();
+    print "UART rx try $try: ".Data::Dumper->Dump([$rxstring], ['rxstring']);
+    sleep 1;
+}
+
+print "== Done with RS232 rx...\n\n";
 print "== How is the object doing?...\n\n";
 print Data::Dumper->Dump([ $apto ]);
 print "\n\n";

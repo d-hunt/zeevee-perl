@@ -1,5 +1,5 @@
 # Perl module for speaking to Aptovision API
-package Aptovision_API;
+package ZeeVee::Aptovision_API;
 use Class::Accessor "antlers";
 
 use warnings;
@@ -147,7 +147,9 @@ sub expect($$) {
 	if( defined($JSRef->{'result'}) ) {
 	    $unexpected .= "PROCESSING status with 'result' defined.\n";
 	}
-	$self->{'Requests'}->{"$JSRef->{'request_id'}"} = "$cmd";
+	# Add to Requests unless this request already exists.
+	$self->{'Requests'}->{"$JSRef->{'request_id'}"} = "$cmd"
+	    unless( exists($self->{'Requests'}->{"$JSRef->{'request_id'}"}) )	
     } else {
 	$unexpected .= "Unimplemented status '".$JSRef->{'status'}."' received.\n";
     }
@@ -196,6 +198,64 @@ sub poll($) {
     }
 
     return $new_events;
+}
+
+
+# Get ready to handle an event; Meaning make its "request_id" valid.
+sub prepare($$) {
+    my $self = shift;
+    my $event_id = shift;
+
+    if( exists $self->Events->{ $event_id } ) {
+	my $event = $self->Events->{$event_id};
+	if( exists $event->{'request_id'}
+	    &&!exists($self->Requests->{"$event->{'request_id'}"}) ) {
+	    $self->Requests->{"$event->{'request_id'}"} = "EVENT $event_id"
+	} else {
+	    die "This event, $event_id, doesn't have a request_id.";
+	}
+    } else {
+	my $dumpstring = Data::Dumper->Dump([$self->Events], ["Events"]);
+	die "Unregistered event $event_id.  I have am aware of these:"
+	    .$dumpstring."";
+    }
+    return;
+}
+
+
+# Forget an event since it was handled.
+sub forget($$) {
+    my $self = shift;
+    my $event_id = shift;
+
+    if( exists $self->Events->{ $event_id } ) {
+	delete $self->Events->{ $event_id };
+    } else {
+	my $dumpstring = Data::Dumper->Dump([$self->Events], ["Events"]);
+	die "Unregistered event $event_id.  I have am aware of these:"
+	    .$dumpstring."";
+    }
+    return;
+}
+
+
+# Fence until all outstanding requests are complete.  Ignore everything.
+sub fence_ignore($) {
+    my $self = shift;
+    my $start_time = time();
+    
+    while( keys %{$self->Requests} ) {
+	foreach my $request (sort keys %{$self->Requests}) {
+	    print "Fetching request $request.\n"
+		if( $self->Debug > 1 );
+	    $self->send( "request $request" );
+	    pop @{$self->Results}; # Discard.
+	}
+	die "Timeout on waiting for requests (fence, ignoring results)."
+	    if( $self->Timeout() < (time() - $start_time) )
+    }
+
+    return
 }
 
 
