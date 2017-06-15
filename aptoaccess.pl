@@ -29,25 +29,37 @@ my $uart = new ZeeVee::Apto_UART( { Device => $device,
 				  } );
 
 my $bridge = new ZeeVee::SC18IM700( { UART => $uart,
+				      Timeout => 10,
 				      Debug => $debug,
 				    } );
 
 # Important! Before any I2C access, enable I2C bus timeout; set to ~227ms (default):
-$uart->transmit( "W\x09\x67P" );
+$bridge->register(0x09, 0x67);
 
 # Analog add-in specific.  Set VGA_DDC_SW to output and drive high (to enable EDID access).  Leave LED (P3) OD-Low; all other ports input-only:
-$uart->transmit( "W\x02\xd5\x03\x95P" );
 
-my $gpio = $bridge->gpio([1,0,0,1,1,0,0,0]);
+# Configure GPIO in/out/OD/weak
+$bridge->registerset([0x02, 0x03], [0xd5, 0x95]);
+
+# Set and get GPIO
+my $gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
 print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
+my $register_ref;
 my $register;
-$register = $bridge->register(0x00, 0x30);
+
+# Set to 115200 bps, and break connection!
+# $register_ref = $bridge->registerset([0x00, 0x01], [0x30, 0x00]);
+# print "Register state ".Data::Dumper->Dump([$register_ref], ["register_ref"]);
+
+$register = $bridge->register(0x00);
 print "Register state ".Data::Dumper->Dump([$register], ["register"]);
 
-$register = $bridge->register(0x01, 0x00);
+$register = $bridge->register(0x01);
 print "Register state ".Data::Dumper->Dump([$register], ["register"]);
 
+print "HERE HERE\n";
+$bridge->i2c({'boo'=>"hoo"});
 
 while( my $new_events = $apto->poll() ) {
     print "Got $new_events new events.  All: ".

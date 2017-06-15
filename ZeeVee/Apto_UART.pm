@@ -50,12 +50,14 @@ sub new($\%) {
 
 
 # Initialize the UART over Aptovision
-sub initialize($) {
+sub initialize($$) {
     my $self = shift;
+    my $baudrate = shift // 9600;
 
     # Init for RS-232 access to add-in card.  Sending RX back to API server.
     my @cmds = ( "switch ".$self->Device.":RS232:1 ".$self->Host."",
-		 "set ".$self->Device." property nodes[UART:1].configuration.baud_rate 9600",
+		 "set ".$self->Device." property "
+		 . "nodes[UART:1].configuration.baud_rate $baudrate",
 	);
 
     # Pipeline commands first.
@@ -66,6 +68,17 @@ sub initialize($) {
 
     # Now wait for the commands to complete, ignoring return values.
     $self->Apto->fence_ignore();
+
+    return;
+}
+
+
+# Sets baud rate.
+sub set_baud_rate($$) {
+    my $self = shift;
+    my $baudrate = shift;
+
+    $self->initialize($baudrate);
 
     return;
 }
