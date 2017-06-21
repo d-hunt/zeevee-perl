@@ -5,7 +5,9 @@ use strict;
 use ZeeVee::Aptovision_API;
 use ZeeVee::Apto_UART;
 use ZeeVee::SC18IM700;
+use ZeeVee::PCF8575;
 use Data::Dumper ();
+use Time::HiRes ();
 
 my $device = 'd880399acbf4';
 my $host = '169.254.45.84';
@@ -33,33 +35,261 @@ my $bridge = new ZeeVee::SC18IM700( { UART => $uart,
 				      Debug => $debug,
 				    } );
 
-# Important! Before any I2C access, enable I2C bus timeout; set to ~227ms (default):
-$bridge->register(0x09, 0x67);
+my $sii_gpio = new ZeeVee::PCF8575( { I2C => $bridge,
+				      Address => 0x4c,
+				      Timeout => 10,
+				      Debug => $debug,
+				    } );
+
+my $cya_gpio = new ZeeVee::PCF8575( { I2C => $bridge,
+				      Address => 0x4a,
+				      Timeout => 10,
+				      Debug => $debug,
+				    } );
+
 
 # Analog add-in specific.  Set VGA_DDC_SW to output and drive high (to enable EDID access).  Leave LED (P3) OD-Low; all other ports input-only:
 
+# Temporary values...
+my $register_ref;
+my $register;
+
+# Set to 115200 bps.
+####### FIXME: Skipping for now because it's a pain
+#######   to keep in sync across invokations.
+# $bridge->change_baud_rate(115200);
+
+# Attempt to read back BRG.
+$register_ref = $bridge->registerset([0x00, 0x01]);
+print "Register state set: "
+    .Data::Dumper->Dump([$register_ref], ["register_ref"]);
+
+# Show off single register reading capability.
+$register = $bridge->register(0x00);
+print "Register state single: "
+    .Data::Dumper->Dump([$register], ["register"]);
+
+$register = $bridge->register(0x01);
+print "Register state single: "
+    .Data::Dumper->Dump([$register], ["register"]);
+
 # Configure GPIO in/out/OD/weak
 $bridge->registerset([0x02, 0x03], [0xd5, 0x95]);
+
+# Configure I2C speed to 400kbps (Actually 369kbps)
+$bridge->registerset([0x07, 0x08], [0x05, 0x05]);
+# Configure I2C speed to 100kbps (Actually 97kbps)
+# $bridge->registerset([0x07, 0x08], [0x13, 0x13]);
 
 # Set and get GPIO
 my $gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
 print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
-my $register_ref;
-my $register;
+# Write Analog board GPIO expander @ I2C address 0x4C.
+# 0xffff Selects "VGA" input:
+# 0xfeff Selects "Component Video" input:
+# 0xfdff Selects "Composite Video" input:
+# 0xfbff Selects "S-Video" input:
+$bridge->i2c_raw( { 'Slave' => 0x4c,
+			'Commands' => [{ 'Command' => 'Write',
+					     'Data' => [ 0xfb,
+							 0xff ]
+				       },
+			],
+		  } );
 
-# Set to 115200 bps, and break connection!
-# $register_ref = $bridge->registerset([0x00, 0x01], [0x30, 0x00]);
-# print "Register state ".Data::Dumper->Dump([$register_ref], ["register_ref"]);
+# Make I2C transactions to EDID SEEPROM.
+print "I2C write a little.\n";
+my $rx_ref;
+$rx_ref =
+    $bridge->i2c_raw( { 'Slave' => 0xA0,
+			    'Commands' => [
+				{ 'Command' => 'Write',
+				      'Data' => [ 0x30,
+						  0x40,
+						  0x41,
+						  0x42,
+						  0x43,
+						  0x44,
+						  0x45,
+						  0x46,
+						  0x47,
+				      ]
+				},
+			    ],
+		      } );
 
-$register = $bridge->register(0x00);
-print "Register state ".Data::Dumper->Dump([$register], ["register"]);
 
-$register = $bridge->register(0x01);
-print "Register state ".Data::Dumper->Dump([$register], ["register"]);
+print "I2C write/read back same.\n";
+$rx_ref =
+    $bridge->i2c_raw( { 'Slave' => 0xA0,
+			    'Commands' => [
+				{ 'Command' => 'Write',
+				      'Data' => [ 0x30,
+				      ]
+				},
+				{ 'Command' => 'Read',
+				      'Length' => 8,
+				},
+			    ],
+		      } );
 
-print "HERE HERE\n";
-$bridge->i2c({'boo'=>"hoo"});
+foreach my $byte (@{$rx_ref}) {
+    printf( "0x%x, ", $byte );
+}
+print "\n";
+
+
+$rx_ref =
+    $bridge->i2c_raw( { 'Slave' => 0xA0,
+			    'Commands' => [{ 'Command' => 'Write',
+						 'Data' => [ 0x00,
+						 ]
+					   },
+					   { 'Command' => 'Read',
+						 'Length' => 8},
+			    ],
+		      } );
+
+foreach my $byte (@{$rx_ref}) {
+    printf( "0x%x, ", $byte );
+}
+print "\n";
+
+exit;
+
+# Toggle I2C GPIO as fast as possible.
+my $count=10;
+my $i2c_starttime = Time::HiRes::time();
+while ($count > 0) {
+    $bridge->i2c_raw( { 'Slave' => 0x4a,
+			    'Commands' => [{ 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+					   { 'Command' => 'Stop',
+					   },
+					   { 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+					   { 'Command' => 'Stop',
+					   },
+					   { 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+					   { 'Command' => 'Stop',
+					   },
+					   { 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+					   { 'Command' => 'Stop',
+					   },
+					   { 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+					   { 'Command' => 'Stop',
+					   },
+					   { 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+					   { 'Command' => 'Stop',
+					   },
+					   { 'Command' => 'Write',
+						 'Data' => [ 0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,
+							     0xff,
+							     0xf9,
+							     0xff,
+							     0xff,]
+					   },
+			    ],
+		      } );
+    print ".";
+    $count--;
+}
+$i2c_starttime -= Time::HiRes::time();
+print "\nDone I2C.  $i2c_starttime seconds.\n";
+
+sleep 2;
+$cya_gpio->write([1,1,1,1,1,1,1,1,
+		  1,0,0,1,1,1,1,1]);
+$cya_gpio->write([1,1,1,1,1,1,1,1,
+		  1,1,1,1,1,1,1,1]);
+$cya_gpio->write([1,1,1,1,1,1,1,1,
+		  1,0,0,1,1,1,1,1]);
+$cya_gpio->write([1,1,1,1,1,1,1,1,
+		  1,1,1,1,1,1,1,1]);
 
 while( my $new_events = $apto->poll() ) {
     print "Got $new_events new events.  All: ".

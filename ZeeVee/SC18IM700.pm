@@ -5,6 +5,7 @@ use Class::Accessor "antlers";
 use warnings;
 use strict;
 use Data::Dumper ();
+use Time::HiRes ( qw/sleep/ );
 
 has UART => ( is => "ro" );
 has Timeout => ( is => "ro" );
@@ -37,7 +38,9 @@ sub new($\%) {
 sub initialize($) {
     my $self = shift;
 
-    # Nothing yet.
+    # Important! Before any I2C access, enable I2C bus timeout; set to ~227ms (default):
+    $self->register(0x09, 0x67);
+
     return;
 }
 
@@ -105,6 +108,7 @@ sub register($$;$) {
     return $value;
 }
 
+
 # Get/Set multiple internal Registers
 # Takes and returns references to array of ordinal numbers.
 sub registerset($\@;\@) {
@@ -145,7 +149,7 @@ sub registerset($\@;\@) {
     $self->UART->transmit( $rd_cmd );
     my $value_string = "";
     my $start_time = time();
-   do {
+    do {
 	$value_string .= $self->UART->receive();
 	die "Timeout waiting to receive N bytes from UART."
 	    if($self->Timeout() < (time() - $start_time) );
@@ -160,36 +164,118 @@ sub registerset($\@;\@) {
     return $value_ref;
 }
 
+
+# Change baud rate; it's tricky because:
+#  - Aptovision API seems to be faster changing Baud rate than transmitting!
+#  - SC18IM700 resets if you send it some bad commands
+#  - Even the "P" at the end of command has to come at new rate.
+# Takes baud rate.
+sub change_baud_rate($$) {
+    my $self = shift;
+    my $baud_rate = shift;
+
+    my $brg_h = (((7372800 / $baud_rate) - 16) >> 8) & 0xFF;
+    my $brg_l = (((7372800 / $baud_rate) - 16) >> 0) & 0xFF;
+ 
+    my $register_ref = [0x00, 0x01];
+    my $value_ref = [$brg_l, $brg_h];
+
+    foreach my $register (@{$register_ref}) {
+	$register = chr($register);
+    }
+    
+    foreach my $value (@{$value_ref}) {
+	$value = chr($value);
+    }
+	
+    # Construct Write command.
+    my $wr_cmd = "W";
+    foreach my $index (keys @{$value_ref}) {
+	$wr_cmd .= $register_ref->[$index];
+	$wr_cmd .= $value_ref->[$index];
+    }
+    # Leave out the "P" it has to be sent at new baud rate!
+    $self->UART->transmit( $wr_cmd );
+
+    # Now set new Baud rate and wait for UART timeout on SC18IM700 side.
+    sleep 0.250;
+    $self->UART->set_baud_rate($baud_rate);
+    sleep 1.000;
+
+    # Verify successful transition to new baud rate.
+    $value_ref = $self->registerset([0x00, 0x01]);
+
+    die "Baud rate doesn't appear to be what we set!"
+	unless( ($value_ref->[0] eq $brg_l)
+		&& ($value_ref->[1] eq $brg_h) );
+
+    return;
+}
+
+
 # I2C transaction from hash description.
-sub i2c($\%;) {
+# 'Data' elements and return values are references to array of ordinals.
+# Slave address and Length are ordinals.
+# FIXME: No I2C status is checked!
+sub i2c_raw($\%;) {
     my $self = shift;
     my $transaction_ref = shift;
     my %transaction = %{$transaction_ref};
+    my $tx_string = "";
+    my $rx_string = "";
+    my $rx_length = 0;
+
+    my $i2c_read = 0x01;
+    my $i2c_write = 0x00;
 
     
-    print "tx: ".Data::Dumper->Dump([\%transaction],["transaction"]);
-'    $register = chr($register);
+    print "tx: ".Data::Dumper->Dump([\%transaction],["transaction"])
+	if($self->Debug() > 1);
 
-    if( defined($value) ) {
-	# User wants to set the internal register.
-	$value = chr($value);
-	$self->UART->transmit( "W".$register.$value."P" );
+    foreach my $command (@{$transaction{'Commands'}}) {
+	if( $command->{'Command'} eq 'Write' ) {
+	    $tx_string .= 'S';
+	    $tx_string .= chr($transaction{'Slave'} | $i2c_write);
+	    $tx_string .= chr(scalar(@{$command->{'Data'}}));
+	    foreach my $byte (@{$command->{'Data'}}) {
+		$tx_string .= chr($byte);
+	    }
+	} elsif ( $command->{'Command'} eq 'Read' ) {
+	    $tx_string .= 'S';
+	    $tx_string .= chr($transaction{'Slave'} | $i2c_read);
+	    $tx_string .= chr($command->{'Length'});
+	    $rx_length += $command->{'Length'};
+	} elsif ( $command->{'Command'} eq 'Stop' ) {
+	    $tx_string .= 'P';
+	} else {
+	    die "Unimplemented I2C command ".$command->{'Command'}.""
+	}
     }
+    $tx_string .= 'P';
 
-    # Read register back regardless. (Expecting 1 byte back)
-    $self->UART->transmit( "R".$register."P" );
-    $value = "";
+    # Send I2C transaction.
+    print "tx_string: '$tx_string'\n"
+	if($self->Debug() > 1);
+    $self->UART->transmit( $tx_string );
+
+    # FIXME: Check Status of transaction here.
+
     my $start_time = time();
-    do {
-	$value .= $self->UART->receive();
+    while ( length($rx_string) < $rx_length ) {
+	$rx_string .= $self->UART->receive();
 	die "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
-    } while ( $value eq "" );
-    $value = ord($value);
-    
-    return $value;
-'
-}
+    }
+    print "rx_string: '$rx_string'\n"
+	if($self->Debug() > 1);
 
+    my @rx_array = (split '', $rx_string);
+    my $rx_ref = \@rx_array;
+    foreach my $byte (@rx_array) {
+	$byte = ord($byte);
+    }
+
+    return $rx_ref;
+}
 
 1;
