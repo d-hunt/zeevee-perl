@@ -6,8 +6,9 @@ use ZeeVee::Aptovision_API;
 use ZeeVee::Apto_UART;
 use ZeeVee::SC18IM700;
 use ZeeVee::PCF8575;
+use ZeeVee::SPI_GPIO;
 use Data::Dumper ();
-use Time::HiRes ();
+use Time::HiRes ( qw/sleep/ );
 
 my $device = 'd880399acbf4';
 my $host = '169.254.45.84';
@@ -47,6 +48,16 @@ my $cya_gpio = new ZeeVee::PCF8575( { I2C => $bridge,
 				      Debug => $debug,
 				    } );
 
+my $spi_serializer = new ZeeVee::SPI_GPIO( { GPIO => $cya_gpio,
+					     Timeout => 10,
+					     Debug => $debug,
+					     Bits => { 'Select' => 12,
+							   'Clock' => 13,
+							   'MISO' => 14,
+							   'MOSI' => 15,
+					     }
+					   } );
+
 
 # Analog add-in specific.  Set VGA_DDC_SW to output and drive high (to enable EDID access).  Leave LED (P3) OD-Low; all other ports input-only:
 
@@ -74,7 +85,7 @@ print "Register state single: "
     .Data::Dumper->Dump([$register], ["register"]);
 
 # Configure GPIO in/out/OD/weak
-$bridge->registerset([0x02, 0x03], [0xd5, 0x95]);
+$bridge->registerset([0x02, 0x03], [0xd5, 0x97]);
 
 # Configure I2C speed to 400kbps (Actually 369kbps)
 $bridge->registerset([0x07, 0x08], [0x05, 0x05]);
@@ -156,12 +167,111 @@ foreach my $byte (@{$rx_ref}) {
 }
 print "\n";
 
-exit;
+# Toggle GPIO pins the slow way.
+print "Toggling unused GPIO pins the slow way...\n";
+my $count=4;
+my $i2c_starttime = 0 - Time::HiRes::time();
+while ($count > 0) {
+    $cya_gpio->write([1,1,1,1,1,1,1,1,
+		      1,0,0,1,1,1,1,1]);
+    $cya_gpio->write([1,1,1,1,1,1,1,1,
+		      1,1,1,1,1,1,1,1]);
+    $count--;
+    print ".";
+}
+$i2c_starttime += Time::HiRes::time();
+print "\nDone I2C one-at-a-time.  $i2c_starttime seconds.\n";
+
+sleep 5;
 
 # Toggle I2C GPIO as fast as possible.
-my $count=10;
-my $i2c_starttime = Time::HiRes::time();
+print "Toggling unused GPIO pins as fast as possible...\n";
+my @stream_data = ();
+$count=11;
+$i2c_starttime = 0 - Time::HiRes::time();
 while ($count > 0) {
+    push @stream_data, 0xf9ff;
+    push @stream_data, 0xffff;
+    $count--;
+}
+$cya_gpio->stream_write(\@stream_data);
+$i2c_starttime += Time::HiRes::time();
+print "\nDone I2C stream.  $i2c_starttime seconds.\n";
+
+
+# Reset board for SPI access.
+print "Starting to write the SPI ROM.\n";
+sleep 1.5;
+
+print "Resetting board.\n";
+$gpio = $bridge->gpio([1,1,1,0,0,1,1,1]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+print "\n";
+
+sleep 0.5;
+
+# MOSI, MISO, CLK, CS_L top 4 bits.
+my @write_enable_stream = ();
+push @write_enable_stream, @{$spi_serializer->start_stream()};
+push @write_enable_stream, @{$spi_serializer->make_stream(chr(0x06))};
+push @write_enable_stream, @{$spi_serializer->end_stream()};
+
+my @bulk_erase_stream = ();
+push @bulk_erase_stream, @{$spi_serializer->start_stream()};
+push @bulk_erase_stream, @{$spi_serializer->make_stream(chr(0xc7))};
+push @bulk_erase_stream, @{$spi_serializer->end_stream()};
+
+my @page_program_stream = ();
+my $data_string = "For me to poop on!     "x2;
+push @page_program_stream, @{$spi_serializer->start_stream()};
+push @page_program_stream, @{$spi_serializer->make_stream(chr(0x02).chr(0x00).chr(0x00).chr(0x00))};
+push @page_program_stream, @{$spi_serializer->make_stream($data_string)};
+push @page_program_stream, @{$spi_serializer->end_stream()};
+
+$cya_gpio->stream_write(\@write_enable_stream);
+$cya_gpio->stream_write(\@bulk_erase_stream);
+sleep 6;
+$cya_gpio->stream_write(\@write_enable_stream);
+$cya_gpio->stream_write(\@page_program_stream);
+
+sleep 0.5;
+
+print "Releasing reset.\n";
+$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+
+exit;
+
+
+# Reset board for SPI access.
+print "Starting to read the SPI ROM.\n";
+sleep 5;
+
+print "Resetting board.\n";
+$gpio = $bridge->gpio([1,1,1,0,0,1,1,1]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+
+sleep 0.5;
+
+# MOSI, MISO, CLK, CS_L top 4 bits.
+@stream_data = ();
+push @stream_data, @{$spi_serializer->start_stream()};
+push @stream_data, @{$spi_serializer->make_stream(chr(0x03).chr(0x00)x16)};
+push @stream_data, @{$spi_serializer->end_stream()};
+
+$cya_gpio->stream_write(\@stream_data);
+
+sleep 0.5;
+
+print "Releasing reset.\n";
+$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+
+exit;
+
+
+
+while (0) {
     $bridge->i2c_raw( { 'Slave' => 0x4a,
 			    'Commands' => [{ 'Command' => 'Write',
 						 'Data' => [ 0xff,
