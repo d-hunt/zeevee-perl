@@ -62,7 +62,7 @@ sub read($) {
 						 },
 				  ],
 			     } );
-    my $value = $i2c_state_ref->[0] & ($i2c_state_ref->[1] << 8);
+    my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
     my @state = ();
     for( my $bit=0; $bit < 16; $bit++) {
 	$state[$bit] = (($value >> $bit) & 0x01);
@@ -72,7 +72,7 @@ sub read($) {
 }
 
 
-# Writes to PCF875.
+# Writes to PCF875.  Reads back value.
 sub write($\@;) {
     my $self = shift;
     my $state_ref = shift;
@@ -86,15 +86,27 @@ sub write($\@;) {
     my $char_h = (($char >> 8) & 0xff);
     my $char_l = (($char >> 0) & 0xff);
 
-    $self->I2C->i2c_raw( { 'Slave' => $self->Address(),
-			       'Commands' => [{ 'Command' => 'Write',
-						    'Data' => [ $char_l,
-								$char_h, ]
-					      },
-			       ],
-			 } );
+    my $i2c_state_ref = 
+	$self->I2C->i2c_raw( { 'Slave' => $self->Address(),
+				   'Commands' => [{ 'Command' => 'Write',
+							'Data' => [ $char_l,
+								    $char_h, ]
+						  },
+						  { 'Command' => 'Read',
+							'Length' => 2,
+						  },
+				   ],
+			     } );
     
-    return;
+    # The read acts as a fence!
+
+    my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
+    @state = ();
+    for( my $bit=0; $bit < 16; $bit++) {
+	$state[$bit] = (($value >> $bit) & 0x01);
+    }
+    
+    return \@state;
 }
 
 
@@ -139,9 +151,15 @@ sub stream_write($\@) {
 	    $current_command = undef;
 	}
 
+	# The final read acts as a fence!
+	$current_command = { 'Command' => 'Read',
+				 'Length' => 2 };
+	push @{$commands}, $current_command;
+	$current_command = undef;
+
 	print "Stream I2C write transaction prepared: ".
 	    Data::Dumper->Dump([$i2c_transaction], ["i2c_transaction"])
-	    if( $self->Debug > 0);
+	    if( $self->Debug > 1);
     }
 
     $self->I2C->i2c_raw( $i2c_transaction );
