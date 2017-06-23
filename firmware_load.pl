@@ -119,7 +119,7 @@ print "\n";
 
 sleep 0.5;
 
-$i2c_starttime = 0 - Time::HiRes::time();
+my $i2c_starttime = 0 - Time::HiRes::time();
 $flash->bulk_erase();
 my $address = 0;
 $flash->page_program({ 'Address' => $address,

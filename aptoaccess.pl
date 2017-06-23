@@ -16,7 +16,6 @@ my $host = '169.254.45.84';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
-my $max_file_size = 100 * 1024;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
@@ -124,12 +123,24 @@ $bridge->registerset([0x07, 0x08], [0x05, 0x05]);
 $gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
 print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
+print "Resetting board.  LED off.\n";
+$gpio = $bridge->gpio([1,1,1,1,0,1,1,1]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+print "\n";
+
+sleep 0.25;
+
+print "Releasing reset.  LED on.\n";
+$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
+print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+print "\n";
+
 # Write Analog board GPIO expander @ I2C address 0x4C.
 # 0xffff Selects "VGA" input:
-# 0xfeff Selects "Component Video" input:
-# 0xfdff Selects "Composite Video" input:
-# 0xfbff Selects "S-Video" input:
-$sii_gpio->write([0,1,1,1,1,1,1,1,
+# 0xfffe Selects "Component Video" input:
+# 0xfffd Selects "Composite Video" input:
+# 0xfffb Selects "S-Video" input:
+$sii_gpio->write([1,1,0,1,1,1,1,1,
 		  1,1,1,1,1,1,1,1]);
 #$bridge->i2c_raw( { 'Slave' => 0x4c,
 #			'Commands' => [{ 'Command' => 'Write',
@@ -230,52 +241,6 @@ $i2c_starttime += Time::HiRes::time();
 print "\nDone I2C stream.  $i2c_starttime seconds.\n";
 
 
-# exit 0;
-
-##################
-## SPI Programming
-##################
-
-# Open and read file.
-my $filename = $ARGV[0] // "fw.bin";
-my $data_string = "";
-open( FILE, "<:raw", $filename )
-    or die "Can't open file $filename.";
-read( FILE, $data_string, $max_file_size )
-    or die "Error reading from file $filename.";
-close FILE;
-print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
-
-# Reset board for SPI access.
-print "Starting to write the SPI ROM.\n";
-sleep 1.5;
-
-print "Resetting board.\n";
-$gpio = $bridge->gpio([1,1,1,0,0,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
-print "\n";
-
-sleep 0.5;
-
-# MOSI, MISO, CLK, CS_L top 4 bits.
-$i2c_starttime = 0 - Time::HiRes::time();
-#my $data_string = "That's a very nice SPI transaction...  For me to poop on! 0123456789abcdef0123456789abcdef" x 10;
-$flash->bulk_erase();
-my $address = 0;
-$flash->page_program({ 'Address' => $address,
-			   'Data' => $data_string,
-		     });
-$flash->write_disable();
-$i2c_starttime += Time::HiRes::time();
-print "It took $i2c_starttime seconds to serialize SPI and interact with Aptovision API.\n";
-
-sleep 0.5;
-
-print "Releasing reset.\n";
-$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
-
-$apto->close();
 exit 0;
 
 __END__
