@@ -269,13 +269,12 @@ sub close($) {
 __END__
 
 
-# CLEAN UP AUTOMATICALLY on destruciton??
+# CLEAN UP AUTOMATICALLY on destruction??
 $telnet->close();
 
 FIXME:
 Handle Events and clear -- e.g. request_complete
 Wait for requests to complete?  (Fence?)
-RS-232 TX/RX.
 
 Don't Fix:
 Asynchronous events.

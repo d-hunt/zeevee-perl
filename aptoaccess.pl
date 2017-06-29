@@ -42,12 +42,14 @@ my $sii_gpio = new ZeeVee::PCF8575( { I2C => $bridge,
 				      Address => 0x4c,
 				      Timeout => $timeout,
 				      Debug => $debug,
+				      WriteMask => [4, 5, 6, 7, 8],
 				    } );
 
 my $cya_gpio = new ZeeVee::PCF8575( { I2C => $bridge,
 				      Address => 0x4a,
 				      Timeout => $timeout,
 				      Debug => $debug,
+				      WriteMask => [9, 10, 11, 12, 13, 14, 15],
 				    } );
 
 my $spi = new ZeeVee::SPI_GPIO( { GPIO => $cya_gpio,
@@ -121,18 +123,22 @@ $bridge->registerset([0x07, 0x08], [0x05, 0x05]);
 
 # Set and get GPIO
 $gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+print "Bridge GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
 print "Resetting board.  LED off.\n";
 $gpio = $bridge->gpio([1,1,1,1,0,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+print "Bridge GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 print "\n";
 
 sleep 0.25;
 
+print "\nTurning off debug mode.  Selecting Analog Audio.\n\n";
+$cya_gpio->write([1,1,1,1,1,1,1,1,
+		  1,1,1,1,1,1,1,1]);
+
 print "Releasing reset.  LED on.\n";
 $gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
+print "Bridge GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 print "\n";
 
 # Write Analog board GPIO expander @ I2C address 0x4C.
@@ -140,8 +146,14 @@ print "\n";
 # 0xfffe Selects "Component Video" input:
 # 0xfffd Selects "Composite Video" input:
 # 0xfffb Selects "S-Video" input:
+print "Setting Composite.\n";
+$sii_gpio->write([1,0,1,1,1,1,1,1,
+		  1,1,1,1,1,1,1,1]);
+sleep 10;
+print "Setting S-Video.\n";
 $sii_gpio->write([1,1,0,1,1,1,1,1,
 		  1,1,1,1,1,1,1,1]);
+
 #$bridge->i2c_raw( { 'Slave' => 0x4c,
 #			'Commands' => [{ 'Command' => 'Write',
 #					     'Data' => [ 0xfb,
@@ -209,6 +221,9 @@ foreach my $byte (@{$rx_ref}) {
 }
 print "\n";
 
+# Take away the mask from unused pins 9, 10 so we can toggle...
+$cya_gpio->WriteMask([11, 12, 13, 14, 15]);
+
 # Toggle GPIO pins the slow way.
 print "Toggling unused GPIO pins the slow way...\n";
 my $count=4;
@@ -240,6 +255,10 @@ $cya_gpio->stream_write(\@stream_data);
 $i2c_starttime += Time::HiRes::time();
 print "\nDone I2C stream.  $i2c_starttime seconds.\n";
 
+
+#print "\nLeaving in debug mode.  Digital Audio.\n";
+#$cya_gpio->write([0,1,1,1,1,1,1,1,
+#		  0,1,1,1,1,1,1,1]);
 
 exit 0;
 

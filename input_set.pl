@@ -16,9 +16,10 @@ my $host = '169.254.45.84';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
-my $max_file_size = 100 * 1024;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
+
+my $desired_input = $ARGV[0] // '';
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -79,66 +80,59 @@ my $flash = new ZeeVee::SPIFlash( { SPI => $spi,
 
 
 # Temporary values...
-my $register_ref;
-my $register;
 my $gpio;
+
+
+# First get current states.
+$gpio = $bridge->gpio();
+print "Initial Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+$gpio = $sii_gpio->read();
+print "Initial SiI GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+$gpio = $cya_gpio->read();
+print "Initial CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+
 
 # Set to 115200 bps.
 ####### FIXME: Skipping for now because it's a pain
 #######   to keep in sync across invokations.
 # $bridge->change_baud_rate(115200);
 
-# Configure GPIO in/out/OD/weak
-$bridge->registerset([0x02, 0x03], [0xd5, 0x97]);
+# Get starting point.
+$gpio = $sii_gpio->read();
 
-# Configure I2C speed to 400kbps (Actually 369kbps)
-$bridge->registerset([0x07, 0x08], [0x05, 0x05]);
-# Configure I2C speed to 100kbps (Actually 97kbps)
-# $bridge->registerset([0x07, 0x08], [0x13, 0x13]);
+# 0xffff Selects "VGA" input:
+# 0xfffe Selects "Component Video" input:
+# 0xfffd Selects "Composite Video" input:
+# 0xfffb Selects "S-Video" input:
+if( $desired_input eq "Composite" ) {
+    print "\nSetting Composite Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 1;
+    $gpio->[1] = 0;
+    $gpio->[0] = 1;
+} elsif ( $desired_input eq "S-Video" ) {
+    print "\nSetting S-Video Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 0;
+    $gpio->[1] = 1;
+    $gpio->[0] = 1;
+} elsif ( $desired_input eq "Component" ) {
+    print "\nSetting Component Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 1;
+    $gpio->[1] = 1;
+    $gpio->[0] = 0;
+} elsif ( $desired_input eq "VGA" ) {
+    print "\nSetting VGA Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 1;
+    $gpio->[1] = 1;
+    $gpio->[0] = 1;
+} else {
+    die "Unknown input '$desired_input'.";
+}
 
-##################
-## SPI Programming
-##################
+$gpio = $sii_gpio->write($gpio);
+print "Ending SiI GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
-# Open and read file.
-my $filename = $ARGV[0] // "fw.bin";
-my $data_string = "";
-open( FILE, "<:raw", $filename )
-    or die "Can't open file $filename.";
-read( FILE, $data_string, $max_file_size )
-    or die "Error reading from file $filename.";
-close FILE;
-print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
-
-# Take away the write mask for SPI output pins.
-$cya_gpio->WriteMask([9, 10, 11, 14]);
-
-# Reset board for SPI access.
-print "Starting to write the SPI ROM.\n";
-sleep 1.5;
-
-print "Resetting board.  LED on.\n";
-$gpio = $bridge->gpio([1,1,1,0,0,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
-print "\n";
-
-sleep 0.5;
-
-my $i2c_starttime = 0 - Time::HiRes::time();
-$flash->bulk_erase();
-my $address = 0;
-$flash->page_program({ 'Address' => $address,
-			   'Data' => $data_string,
-		     });
-$flash->write_disable();
-$i2c_starttime += Time::HiRes::time();
-print "It took $i2c_starttime seconds to program SPI Flash and interact with Aptovision API.\n";
-
-sleep 0.5;
-
-print "Releasing reset.\n";
-$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
-
-$apto->close();
 exit 0;

@@ -30,7 +30,7 @@ sub new($\%) {
 	$arg_ref->{'Debug'} = 0;
     }
     unless( exists $arg_ref->{'WriteMask'} ) {
-	$arg_ref->{'WriteMask'} = 0x0000;
+	$arg_ref->{'WriteMask'} = [];
     }
     
     my $self = $class->SUPER::new( $arg_ref );
@@ -79,6 +79,10 @@ sub write($\@;) {
 
     # User wants to set the GPIO.
     my @state = @{$state_ref};
+    # Apply mask. (1 is driven weak.)
+    foreach my $bit (@{$self->WriteMask}) {
+	$state[$bit] = 1;
+    }
     my $char = 0;
     for( my $bit=0; $bit < 16; $bit++) {
 	$char += $state[$bit] << $bit;
@@ -118,13 +122,19 @@ sub stream_write($\@) {
 				'Commands' => [] };
     my $commands = $i2c_transaction->{'Commands'};
 
+    # Calculate mask. (1 is driven weak.)
+    my $mask = 0;
+    foreach my $bit (@{$self->WriteMask}) {
+	$mask |= (1 << $bit);
+    }
+
     # Construct the I2C commands.
     {
 	my $page_size = 12;
 	my $current_command = undef;
 	foreach my $word (@{$stream_ref}) {
-	    my $char_h = (($word >> 8) & 0xff);
-	    my $char_l = (($word >> 0) & 0xff);
+	    my $char_h = ((($word | $mask) >> 8) & 0xff);
+	    my $char_l = ((($word | $mask) >> 0) & 0xff);
 	    
 	    if( !defined($current_command) ) {
 		# We need to set up a new write command

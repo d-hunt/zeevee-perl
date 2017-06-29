@@ -16,7 +16,6 @@ my $host = '169.254.45.84';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
-my $max_file_size = 100 * 1024;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
@@ -79,66 +78,34 @@ my $flash = new ZeeVee::SPIFlash( { SPI => $spi,
 
 
 # Temporary values...
-my $register_ref;
-my $register;
 my $gpio;
+
+
+# First get current states.
+$gpio = $bridge->gpio();
+print "Initial Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
 # Set to 115200 bps.
 ####### FIXME: Skipping for now because it's a pain
 #######   to keep in sync across invokations.
 # $bridge->change_baud_rate(115200);
 
-# Configure GPIO in/out/OD/weak
-$bridge->registerset([0x02, 0x03], [0xd5, 0x97]);
+# Get starting point.
+$gpio = $bridge->gpio();
 
-# Configure I2C speed to 400kbps (Actually 369kbps)
-$bridge->registerset([0x07, 0x08], [0x05, 0x05]);
-# Configure I2C speed to 100kbps (Actually 97kbps)
-# $bridge->registerset([0x07, 0x08], [0x13, 0x13]);
+# Pulse reset and LED.
+print "\nAsserting Reset; LED off.\n\n";
+$gpio->[4] = 0; # MSTR_RST_L
+$gpio->[3] = 1; # STATUS_LED_L
+$gpio = $bridge->gpio($gpio);
 
-##################
-## SPI Programming
-##################
+sleep 1;
 
-# Open and read file.
-my $filename = $ARGV[0] // "fw.bin";
-my $data_string = "";
-open( FILE, "<:raw", $filename )
-    or die "Can't open file $filename.";
-read( FILE, $data_string, $max_file_size )
-    or die "Error reading from file $filename.";
-close FILE;
-print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
+print "\nDeasserting Reset; LED on.\n\n";
+$gpio->[4] = 1; # MSTR_RST_L
+$gpio->[3] = 0; # STATUS_LED_L
+$gpio = $bridge->gpio($gpio);
 
-# Take away the write mask for SPI output pins.
-$cya_gpio->WriteMask([9, 10, 11, 14]);
+print "Ending Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
-# Reset board for SPI access.
-print "Starting to write the SPI ROM.\n";
-sleep 1.5;
-
-print "Resetting board.  LED on.\n";
-$gpio = $bridge->gpio([1,1,1,0,0,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
-print "\n";
-
-sleep 0.5;
-
-my $i2c_starttime = 0 - Time::HiRes::time();
-$flash->bulk_erase();
-my $address = 0;
-$flash->page_program({ 'Address' => $address,
-			   'Data' => $data_string,
-		     });
-$flash->write_disable();
-$i2c_starttime += Time::HiRes::time();
-print "It took $i2c_starttime seconds to program SPI Flash and interact with Aptovision API.\n";
-
-sleep 0.5;
-
-print "Releasing reset.\n";
-$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
-print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
-
-$apto->close();
 exit 0;
