@@ -93,6 +93,9 @@ print "Initial Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 # Get starting point.
 $gpio = $bridge->gpio();
 
+# Configure GPIO in/out/OD/weak
+$bridge->registerset([0x02, 0x03], [0xd5, 0x97]);
+
 # Pulse reset and LED.
 print "\nAsserting Reset; LED off.\n\n";
 $gpio->[4] = 0; # MSTR_RST_L
