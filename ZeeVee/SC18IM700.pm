@@ -80,6 +80,49 @@ sub gpio($;\@) {
     return $state_ref;
 }
 
+# Get/Set GPIO config.  Takes and returns an array reference.
+sub gpio_config($;\@) {
+    my $self = shift;
+    my $state_ref = shift;
+
+    # Port Configuration meanings.
+    my %PortConf = ( "QuasiBiDir" => 0b00,
+		     "Input"      => 0b01,
+		     "PushPull"   => 0b10,
+		     "OpenDrain"  => 0b11,
+	);
+
+    if( defined($state_ref) ) {
+	# User wants to set the GPIO configuration.
+	my @state = @{$state_ref};
+	my $word = 0;
+	for( my $bit=0; $bit < 8; $bit++) {
+	    die "I don't know about crazy port configuration $state[$bit]"
+		unless( exists($PortConf{"$state[$bit]"}) );
+	    $word |= $PortConf{"$state[$bit]"} << ($bit * 2)
+	}
+	my $low_byte = $word & 0x00FF;
+	my $high_byte = ($word & 0xFF00) >> 8;
+	$self->registerset([0x02, 0x03], [$low_byte, $high_byte]);
+    }
+    
+    # Read GPIO configuration back regardless.
+    $state_ref = $self->registerset([0x02, 0x03]);
+    my $high_byte = $state_ref->[1];
+    my $low_byte = $state_ref->[0];
+    my $word = ($high_byte << 8) | $low_byte;
+    
+    my @state = ();
+    $state_ref = \@state;
+    %PortConf = reverse %PortConf; # Reverse to by-value.
+    for( my $bit=0; $bit < 8; $bit++) {
+	$state[$bit] = ($word >> ($bit * 2)) & 0b11;
+	$state[$bit] = $PortConf{$state[$bit]};
+    }
+    
+    return $state_ref;
+}
+
 # Get/Set internal Register; Takes and returns ordinal numbers.
 sub register($$;$) {
     my $self = shift;
@@ -225,6 +268,10 @@ sub i2c_raw($\%;) {
     my $rx_string = "";
     my $rx_length = 0;
 
+    # SC18IM700 has an undocumented 16-byte FIFO.  S....P (inclusive)
+    # must be 16 bytes or less.  Keep track to enforce.  I've spent way too much time on it!
+    my $tx_string_fifo_head = length($tx_string);
+
     my $i2c_read = 0x01;
     my $i2c_write = 0x00;
 
@@ -234,6 +281,7 @@ sub i2c_raw($\%;) {
 
     foreach my $command (@{$transaction{'Commands'}}) {
 	if( $command->{'Command'} eq 'Write' ) {
+	    $tx_string_fifo_head = length($tx_string);
 	    $tx_string .= 'S';
 	    $tx_string .= chr($transaction{'Slave'} | $i2c_write);
 	    $tx_string .= chr(scalar(@{$command->{'Data'}}));
@@ -241,17 +289,22 @@ sub i2c_raw($\%;) {
 		$tx_string .= chr($byte);
 	    }
 	} elsif ( $command->{'Command'} eq 'Read' ) {
+	    $tx_string_fifo_head = length($tx_string);
 	    $tx_string .= 'S';
 	    $tx_string .= chr($transaction{'Slave'} | $i2c_read);
 	    $tx_string .= chr($command->{'Length'});
 	    $rx_length += $command->{'Length'};
 	} elsif ( $command->{'Command'} eq 'Stop' ) {
 	    $tx_string .= 'P';
+	    die "16-byte FIFO overrun imminent!  Bailing out. "
+		if((length($tx_string) - $tx_string_fifo_head) > 16);
 	} else {
 	    die "Unimplemented I2C command ".$command->{'Command'}.""
 	}
     }
     $tx_string .= 'P';
+    die "16-byte FIFO overrun imminent!  Bailing out"
+	if((length($tx_string) - $tx_string_fifo_head) > 16);
 
     # Send I2C transaction.
     print "tx_string: '$tx_string'\n"
