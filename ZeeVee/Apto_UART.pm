@@ -23,11 +23,8 @@ sub new($\%) {
     unless( exists $arg_ref->{'Device'} ) {
 	die "UART can't work without a target device.";
     }
-    unless( exists $arg_ref->{'Apto'} ) {
-	warn "UART isn't likely to work without a functional Aptovision_API.  "
-	    ."Trying with defaults anyway.";
-	$arg_ref->{'Apto'} =
-	    new ZeeVee::Aptovision_API( {} );
+    unless( exists $arg_ref->{'Device'}->{'Apto'} ) {
+	die "UART can't work without a functional Aptovision_API.";
     }
     unless( exists $arg_ref->{'Host'} ) {
 	$arg_ref->{'Host'} = $arg_ref->{'Apto'}->Host();
@@ -38,6 +35,9 @@ sub new($\%) {
     unless( exists $arg_ref->{'Debug'} ) {
 	$arg_ref->{'Debug'} = 0;
     }
+
+    # Locally alias the Aptovision API for now.
+    $arg_ref->{'Apto'} = $arg_ref->{'Device'}->{'Apto'};
 
     $arg_ref->{'Buffer'} = "";
     
@@ -55,20 +55,10 @@ sub initialize($$) {
     my $baudrate = shift // 9600;
 
     # Init for RS-232 access to add-in card.  Sending RX back to API server.
-    my @cmds = ( "switch ".$self->Device.":RS232:1 ".$self->Host."",
-		 "set ".$self->Device." property "
-		 . "nodes[UART:1].configuration.baud_rate $baudrate",
-	);
+    $self->Device->switch("RS232:1", $self->Host);
+    $self->Device->set_property("nodes[UART:1].configuration.baud_rate", "$baudrate");
 
-    # Pipeline commands first.
-    foreach my $cmd (@cmds) { 
-	$self->Apto->send( $cmd );
-	pop @{$self->Apto->Results}; # Discard.
-    }
-
-    # Now wait for the commands to complete, ignoring return values.
-    $self->Apto->fence_ignore();
-
+    print "Number of results waiting: ".scalar(@{$self->Device->Apto->Results})."\n";
     return;
 }
 
@@ -94,11 +84,7 @@ sub transmit($$) {
     print "Escaped string to transmit: '$tx_escaped'\n"
 	if( $self->Debug > 1 );    
     
-    $self->Apto->send( "send ".$self->Device." RS232:1 ".$tx_escaped."" );
-    pop @{$self->Apto->Results}; # Discard.
-
-    # Now wait for the commands to complete, ignoring return values.
-    $self->Apto->fence_ignore();
+    $self->Device->send( "RS232:1", $tx_escaped );
 
     return;
 }
@@ -110,22 +96,12 @@ sub receive($) {
     my $rx = "";
     my $rx_escaped = "";
     
-    $self->Apto->poll();
-    
-    # Go through events in numerical order
-    foreach my $event_id (sort keys %{$self->Apto->Events}) {
-	my $event = $self->Apto->Events->{$event_id};
-	if( ($event->{'event_type'} eq "RS232_RECEIVED")
-	    && ($event->{'device_id'} eq $self->Device) ) {
-	    
-	    # Grab the data from request and clear event.
-	    $self->Apto->prepare($event_id);
-	    $self->Apto->send( "request ".$event->{'request_id'}."" );
-	    my $result = pop @{$self->Apto->Results};
-	    foreach my $rs232obj (@{$result->{'rs232'}}) {
-		$rx_escaped .= $rs232obj->{'rs232_data'};
-	    }
-	    $self->Apto->forget($event_id);
+    my @event_ids = $self->Device->poll_events("RS232_RECEIVED");
+    my @results = $self->Device->request_events(\@event_ids);
+
+    foreach my $result (@results) {
+	foreach my $rs232obj (@{$result->{'rs232'}}) {
+	    $rx_escaped .= $rs232obj->{'rs232_data'};
 	}
     }
     

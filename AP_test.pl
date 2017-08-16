@@ -4,6 +4,7 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 use ZeeVee::Aptovision_API;
+use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
 use ZeeVee::SC18IM700;
 use ZeeVee::PCF8575;
@@ -13,7 +14,8 @@ use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
-my $device = 'd880399acbf4';
+my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
+my $device_id = 'd880399acbf4';
 my $host = '169.254.45.84';
 my $port = 6970;
 my $timeout = 10;
@@ -28,8 +30,37 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Debug => $debug,
 				       } );
 
-my $uart = new ZeeVee::Apto_UART( { Device => $device,
-				    Apto => $apto,
+# We must have a single decoder on the test network.
+my $rx_device_id = $apto->find_single_device("all_rx");
+print "Using decoder $rx_device_id.\n";
+
+my $decoder = new ZeeVee::BlueRiverDevice( { DeviceID => $rx_device_id,
+					     Apto => $apto,
+					     Timeout => $timeout,
+					     Debug => $debug,
+					   } );
+
+# Determine the encoder to use for this test.
+if( $id_mode eq "NEWENCODER" ) {
+    print "Waiting for a new encoder device...\n";
+    $device_id = $apto->wait_for_new_device("all_tx");
+} elsif ( $id_mode eq "SINGLEENCODER" ) {
+    print "Looking for a single encoder.\n";
+    $device_id = $apto->find_single_device("all_tx");
+} elsif ( $id_mode eq "HARDCODED" ) {
+    print "Using hard-coded device: $device_id.\n";
+} else {
+    die "Unimlemented ID mode: $id_mode.";
+}
+print "Using encoder (DUT) $device_id.\n";
+
+my $encoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
+					     Apto => $apto,
+					     Timeout => $timeout,
+					     Debug => $debug,
+					   } );
+
+my $uart = new ZeeVee::Apto_UART( { Device => $encoder,
 				    Host => $host,
 				    Timeout => $timeout,
 				    Debug => $debug,
@@ -79,10 +110,11 @@ my $flash = new ZeeVee::SPIFlash( { SPI => $spi,
 				  } );
 
 
+# Preparing for non-blocking reads from STDIN.
 my $io_select = IO::Select->new();
 $io_select->add(\*STDIN);
 
-#Temporary result value.
+#Temporary result values.
 my $result;
 my $expected;
 
@@ -260,6 +292,15 @@ unless( $result ~~ $expected ) {
 # 0xfffd Selects "Composite Video" input:
 # 0xfffb Selects "S-Video" input:
 
+# For video tests, configure encoder and decoder.
+$encoder->start("HDMI");
+$decoder->join($encoder->DeviceID.":HDMI:0",
+	       "0",
+	       "genlock" );
+# Little low-level, but gets the correct input selected. (add-in card.)
+$encoder->set_property("nodes[HDMI_DECODER:0].inputs[main:0].configuration.source.value", "1");
+
+print "\n";
 print "Selecting S-Video with deinterlacing.\n";
 $sii_gpio->write([1,1,0,1,1,1,1,1,
 		  1,1,1,1,1,1,1,1]);
@@ -280,7 +321,6 @@ $sii_gpio->write([1,1,1,1,1,1,1,1,
 		  1,1,0,1,1,1,1,1]);
 print "Check VGA; Press Return when done...\n";
 $result = <STDIN>;
-
 
 print "Swap Cables: Remove VGA and S-Video; Connect Component cable.\n";
 $result = <STDIN>;
@@ -322,7 +362,7 @@ do {
 	    ." - Are all power rails on? (V3P3, V2P5, V1P0) [3]=1'b1\n"
 	    .$detail_dump."...";
     }
-    sleep 5 if($rst_state == 1);  # it takes longer to get video.
+    sleep 7.5 if($rst_state == 1);  # it takes longer to get video.
     $rst_state = 1 - $rst_state; # ugly way to toggle.
     if($io_select->can_read(0.05)){
 	$userinput = <STDIN>;
@@ -331,6 +371,7 @@ do {
 	print ".";
     }
 } until(defined($userinput));
+$bridge->gpio([1,0,0,0,1,0,0,1]);
 print "\n";
 $| = 0;
 

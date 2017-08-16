@@ -239,23 +239,146 @@ sub forget($$) {
 }
 
 
-# Fence until all outstanding requests are complete.  Ignore everything.
-sub fence_ignore($) {
+# Fence until all outstanding requests are complete.  Store all events.
+# Return an array of requests fetched.
+sub fence($) {
     my $self = shift;
+    my @fetched_requests = ();
     my $start_time = time();
     
     while( keys %{$self->Requests} ) {
-	foreach my $request (sort keys %{$self->Requests}) {
-	    print "Fetching request $request.\n"
+	foreach my $request_id (sort keys %{$self->Requests}) {
+	    print "Fetching request $request_id.\n"
 		if( $self->Debug > 1 );
-	    $self->send( "request $request" );
-	    pop @{$self->Results}; # Discard.
+	    my $response = $self->send( "request $request_id" );
+	    push @fetched_requests, $request_id
+		if( ($response->{'status'} eq "SUCCESS") ) 
 	}
-	die "Timeout on waiting for requests (fence, ignoring results)."
+	die "Timeout on waiting for requests (fence, storing results)."
 	    if( $self->Timeout() < (time() - $start_time) )
     }
 
+    return @fetched_requests;
+}
+
+
+# Fence until all outstanding requests are complete.  Ignore everything.
+sub fence_ignore($) {
+    my $self = shift;
+
+    my @fetched_requests = $self->fence();
+
+    while( my $request_id = pop @fetched_requests ) {
+	print "Ignoring request $request_id.\n"
+	    if( $self->Debug > 1 );
+	pop @{$self->Results}; # Discard.
+    }
+
     return
+}
+
+
+# Get devices from server.
+# Returns a hashref for DeviceID => details.
+sub device_list($$) {
+    my $self = shift;
+    my $group = shift // "all";
+
+    $self->send( "get $group list" );
+    $self->fence();
+    die "I only expected a single Result on the queue for me!"
+	unless(scalar(@{$self->Results}) == 1);
+
+    my $result = pop @{$self->Results};
+    my %devices = ();
+
+    foreach my $device (@{$result->{'devices'}}) {
+	$device->{"__status__"} = "UP";
+	$devices{$device->{"device_id"}} = $device;
+    }
+    foreach my $device (@{$result->{'error'}}) {
+	$device->{"__status__"} = "DOWN";
+	$devices{$device->{"device_id"}} = $device;
+    }
+
+    return \%devices;
+}
+
+
+# Wait for a new device.
+# Returns deviceID.
+sub wait_for_new_device($$) {
+    my $self = shift;
+    my $group = shift;
+    my $new_device_id = undef;
+
+    my $old_device_list = $self->device_list($group);
+    foreach my $id (sort keys %{$old_device_list}) {
+	delete $old_device_list->{$id}
+	    unless( $old_device_list->{$id}->{"__status__"} eq "UP" );
+    }
+
+    print "Found ".scalar(keys %{$old_device_list})." devices up.\n"
+	if( $self->Debug >= 1 );
+
+    until( defined($new_device_id) ) {
+	my $new_device_list = $self->device_list($group);
+
+	# Delete all devices not UP.
+	foreach my $id (sort keys %{$new_device_list}) {
+	    delete $new_device_list->{$id}
+                unless( $new_device_list->{$id}->{"__status__"} eq "UP" );
+	}
+	# Delete all devices already known.
+	foreach my $id (sort keys %{$new_device_list}) {
+	    delete $new_device_list->{$id}
+                if( exists($old_device_list->{$id}) );
+	}
+
+	# Now see if exactly one new device is left.
+	foreach my $id (sort keys %{$new_device_list}) {
+	    die "Too many devices added at once!  I can only handle one."
+		if( defined($new_device_id) );
+	    $new_device_id = $id;
+	}
+
+	print "Still waiting for a new device...\n"
+	    if( $self->Debug >= 1 );
+	sleep 2;
+    }
+
+    print "Newest: ".$new_device_id."\n"
+	if( $self->Debug >= 1 );
+
+    return $new_device_id;
+}
+
+
+# Finds a single device.
+# Dies if there is more than one matching device.
+# Returns deviceID.
+sub find_single_device($$) {
+    my $self = shift;
+    my $group = shift;
+    my $new_device_id = undef;
+
+    my $device_list = $self->device_list($group);
+    foreach my $id (sort keys %{$device_list}) {
+	delete $device_list->{$id}
+	    unless( $device_list->{$id}->{"__status__"} eq "UP" );
+    }
+
+    my $device_count = scalar keys %{$device_list};
+
+    die "Found $device_count devices.  I'm expecing exactly one (1)!"
+	unless( $device_count == 1 );
+
+    ( $new_device_id ) = keys %{$device_list};
+
+    print "Found single device: ".$new_device_id."\n"
+	if( $self->Debug >= 1 );
+
+    return $new_device_id;
 }
 
 
