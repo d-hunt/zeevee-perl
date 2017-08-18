@@ -37,6 +37,7 @@ print "Using decoder $rx_device_id.\n";
 my $decoder = new ZeeVee::BlueRiverDevice( { DeviceID => $rx_device_id,
 					     Apto => $apto,
 					     Timeout => $timeout,
+					     VideoTimeout => 20,
 					     Debug => $debug,
 					   } );
 
@@ -57,6 +58,7 @@ print "Using encoder (DUT) $device_id.\n";
 my $encoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
 					     Apto => $apto,
 					     Timeout => $timeout,
+					     VideoTimeout => 20,
 					     Debug => $debug,
 					   } );
 
@@ -204,7 +206,7 @@ do {
 	    .$detail_dump."...";
     }
     $led_state = 1 - $led_state; # ugly way to toggle.
-    if($io_select->can_read(0.05)){
+    if($io_select->can_read(0.100)){
 	$userinput = <STDIN>;
     } else {
 	$| = 1; # Autoflush
@@ -301,24 +303,76 @@ $decoder->join($encoder->DeviceID.":HDMI:0",
 $encoder->set_property("nodes[HDMI_DECODER:0].inputs[main:0].configuration.source.value", "1");
 
 print "\n";
-print "Selecting S-Video with deinterlacing.\n";
+print "Selecting S-Video with deinterlacing.  Waiting...\n";
+$bridge->gpio([1,1,1,0,0,1,1,1]);
 $sii_gpio->write([1,1,0,1,1,1,1,1,
 		  1,1,1,1,1,1,1,1]);
+sleep 1;
+$bridge->gpio([1,1,1,0,1,1,1,1]);
 
-print "Check S-Video input 480p; Press Return when done...\n";
+# Wait/Detect if video is there and expected format.
+sleep 1.5;
+$result = $decoder->hdmi_status(1);
+sleep 0.5;
+$result = $decoder->hdmi_status(1);  # Had one miss; debounce just in case.
+unless( $result->{'video'}->{'width'} eq "720"
+	&&  $result->{'video'}->{'height'} eq "480"
+	&&  $result->{'video'}->{'scan_mode'} eq "PROGRESSIVE" ) {
+    my $detail_dump = Data::Dumper->Dump(['720x480 progressive', $result], ["Expected", "Result"]);
+    die "Did not get any video at decoder.\n"
+	.$detail_dump."...";
+}
+
+print "Video Detected.  Manual check:\n";
+print "S-Video input 480p; Press Return when done...\n";
 $result = <STDIN>;
 
-#FIXME: Access HDMI properties to check.
 
-print "Selecting S-Video with NO deinterlacing.\n";
+print "Selecting S-Video with NO deinterlacing.  Waiting...\n";
+$bridge->gpio([1,1,1,0,0,1,1,1]);
 $sii_gpio->write([1,1,0,1,1,1,1,1,
 		  1,1,0,1,1,1,1,1]);
-print "Check S-Video input 480i; Press Return when done...\n";
+sleep 1;
+$bridge->gpio([1,1,1,0,1,1,1,1]);
+
+# Wait/Detect if video is there and expected format.
+sleep 1.5;
+$result = $decoder->hdmi_status(1);
+sleep 0.5;
+$result = $decoder->hdmi_status(1);  # Had one miss; debounce just in case.
+unless( $result->{'video'}->{'width'} eq "1440"
+	&&  $result->{'video'}->{'height'} eq "480"
+	&&  $result->{'video'}->{'scan_mode'} eq "INTERLACED" ) {
+    my $detail_dump = Data::Dumper->Dump(['1440x480 interlaced', $result], ["Expected", "Result"]);
+    die "Did not get any video at decoder.\n"
+	.$detail_dump."...";
+}
+
+print "Video Detected.  Manual check:\n";
+print "S-Video input 480i; Press Return when done...\n";
 $result = <STDIN>;
 
-print "Selecting VGA input.\n";
+print "Selecting VGA input.  Waiting...\n";
+$bridge->gpio([1,1,1,0,0,1,1,1]);
 $sii_gpio->write([1,1,1,1,1,1,1,1,
 		  1,1,0,1,1,1,1,1]);
+sleep 1;
+$bridge->gpio([1,1,1,0,1,1,1,1]);
+
+# Wait/Detect if video is there and expected format.
+sleep 1.5;
+$result = $decoder->hdmi_status(1);
+sleep 0.5;
+$result = $decoder->hdmi_status(1);  # Had one miss; debounce just in case.
+unless( $result->{'video'}->{'width'} eq "1600"
+	&&  $result->{'video'}->{'height'} eq "1200"
+	&&  $result->{'video'}->{'scan_mode'} eq "PROGRESSIVE" ) {
+    my $detail_dump = Data::Dumper->Dump(['1600x1200 progressive', $result], ["Expected", "Result"]);
+    die "Did not get any video at decoder.\n"
+	.$detail_dump."...";
+}
+
+print "Video Detected.  Manual check:\n";
 print "Check VGA; Press Return when done...\n";
 $result = <STDIN>;
 
@@ -335,50 +389,94 @@ unless( $result ~~ $expected ) {
 }
 
 
-print "Selecting Composite Video with NO deinterlacing.\n";
+print "Selecting Composite Video with NO deinterlacing.  Waiting...\n";
+$bridge->gpio([1,1,1,0,0,1,1,1]);
 $sii_gpio->write([1,0,1,1,1,1,1,1,
 		  1,1,0,1,1,1,1,1]);
-print "Check Composite Video input 480i; Press Return when done...\n";
+sleep 1;
+$bridge->gpio([1,1,1,0,1,1,1,1]);
+
+# Wait/Detect if video is there and expected format.
+sleep 1.5;
+$result = $decoder->hdmi_status(1);
+sleep 0.5;
+$result = $decoder->hdmi_status(1);  # Had one miss; debounce just in case.
+unless( $result->{'video'}->{'width'} eq "1440"
+	&&  $result->{'video'}->{'height'} eq "480"
+	&&  $result->{'video'}->{'scan_mode'} eq "INTERLACED" ) {
+    my $detail_dump = Data::Dumper->Dump(['1440x480 interlaced', $result], ["Expected", "Result"]);
+    die "Did not get any video at decoder.\n"
+	.$detail_dump."...";
+}
+
+print "Video Detected.  Manual check:\n";
+print "Composite Video input 480i; Press Return when done...\n";
 $result = <STDIN>;
 
-print "Selecting Component Video input. SPDIF Audio.\n";
+print "Selecting Component Video input. SPDIF Audio.  Waiting...\n";
+$bridge->gpio([1,1,1,0,0,1,1,1]);
 $sii_gpio->write([0,1,1,1,1,1,1,1,
 		  1,1,0,1,1,1,1,1]);
 $cya_gpio->write([1,1,1,1,1,1,1,1,
 		  0,1,1,1,1,1,1,1]);
-print "Check Component+SPDIF; Press Return when done...\n";
+sleep 1;
+$bridge->gpio([1,1,1,0,1,1,1,1]);
+
+# Wait/Detect if video is there and expected format.
+sleep 1.5;
+$result = $decoder->hdmi_status(1);
+sleep 0.5;
+$result = $decoder->hdmi_status(1);  # Had one miss; debounce just in case.
+unless( $result->{'video'}->{'width'} eq "1920"
+	&&  $result->{'video'}->{'height'} eq "1080"
+	&&  $result->{'video'}->{'scan_mode'} eq "INTERLACED" ) {
+    my $detail_dump = Data::Dumper->Dump(['1920x1080 interlaced', $result], ["Expected", "Result"]);
+    die "Did not get any video at decoder.\n"
+	.$detail_dump."...";
+}
+
+print "Video Detected.  Manual check:\n";
+print "Component+SPDIF; Press Return when done...\n";
 $result = <STDIN>;
 
-print "Checking Master Reset.  Watch for Video LED to blink.  Press Return when done...\n";
-my $rst_state = 1;
-$userinput = undef;
-do {
-    $expected = [1,0,0,0,$rst_state,0,0,1];
-    $result = $bridge->gpio($expected);
-    unless( $result ~~ $expected ) {
-	my $detail_dump = Data::Dumper->Dump([$expected, $result], ["Expected", "Result"]);
-	die "Unexpected GPIO state while testing MSTR_RST_L.  Some things to check:\n"
-	    ." - Is MSTR_RST_L shorted to another net?\n"
-	    ." - Are all power rails on? (V3P3, V2P5, V1P0) [3]=1'b1\n"
-	    .$detail_dump."...";
-    }
-    sleep 7.5 if($rst_state == 1);  # it takes longer to get video.
-    $rst_state = 1 - $rst_state; # ugly way to toggle.
-    if($io_select->can_read(0.05)){
-	$userinput = <STDIN>;
-    } else {
-	$| = 1; # Autoflush
-	print ".";
-    }
-} until(defined($userinput));
+print "Checking Master Reset.  Video LED will blink.\n";
+
+# Confirm video is still good before reset.
+$result = $decoder->hdmi_status();
+unless( $result->{'source_stable'} == 1
+	&& $result->{'video'}->{'width'} eq "1920"
+	&& $result->{'video'}->{'height'} eq "1080"
+	&& $result->{'video'}->{'scan_mode'} eq "INTERLACED" ) {
+    my $detail_dump = Data::Dumper->Dump(['1920x1080 interlaced', $result], ["Expected", "Result"]);
+    die "Video not there before reset check.  That was unexpected!\n"
+	.$detail_dump."...";
+}
+
+# Now assert MSTR_RST_L check video goes away.
+$expected = [1,0,0,0,0,0,0,1];
+$result = $bridge->gpio($expected);
+unless( $result ~~ $expected ) {
+    my $detail_dump = Data::Dumper->Dump([$expected, $result], ["Expected", "Result"]);
+    die "Unexpected GPIO state while testing MSTR_RST_L.  Some things to check:\n"
+	." - Is MSTR_RST_L shorted to another net?\n"
+	." - Are all power rails on? (V3P3, V2P5, V1P0) [3]=1'b1\n"
+	.$detail_dump."...";
+}
+
+# Wait/Detect if video has gone away.
+$result = $decoder->hdmi_status(0);
+$result = $decoder->hdmi_status(0);  # Had one miss; debounce just in case.
+unless( $result->{'source_stable'} == 0
+	&& $result->{'video'}->{'width'} eq "0"
+	&& $result->{'video'}->{'height'} eq "0" ) {
+    my $detail_dump = Data::Dumper->Dump(['0x0 not stable', $result], ["Expected", "Result"]);
+    die "Video still there after reset asserted.  Check MSTR_RST_L net.\n"
+	.$detail_dump."...";
+}
+
 $bridge->gpio([1,0,0,0,1,0,0,1]);
-print "\n";
-$| = 0;
 
-
-#FIXME: Check MSTR_RST_L and get HDMI properties bounce.
-
-print "DONE.\n";
+print "=== DONE. DeviceID = ".$encoder->DeviceID()."===\n";
 
 exit 0;
 

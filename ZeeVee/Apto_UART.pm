@@ -58,7 +58,6 @@ sub initialize($$) {
     $self->Device->switch("RS232:1", $self->Host);
     $self->Device->set_property("nodes[UART:1].configuration.baud_rate", "$baudrate");
 
-    print "Number of results waiting: ".scalar(@{$self->Device->Apto->Results})."\n";
     return;
 }
 

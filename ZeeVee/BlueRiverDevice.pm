@@ -6,10 +6,12 @@ use warnings;
 use strict;
 use ZeeVee::Aptovision_API;
 use Data::Dumper ();
+use Time::HiRes ( qw/sleep/ );
 
 has DeviceID => ( is => "ro" );
 has Apto => ( is => "ro" );
 has Timeout => ( is => "ro" );
+has VideoTimeout => ( is => "ro" );
 has Debug => ( is => "ro" );
 has AptoDevice =>  ( is => "rw" );
 
@@ -30,6 +32,9 @@ sub new($\%) {
     unless( exists $arg_ref->{'Timeout'} ) {
 	$arg_ref->{'Timeout'} = 10;
     }
+    unless( exists $arg_ref->{'VideoTimeout'} ) {
+	$arg_ref->{'Timeout'} = 20;
+    }
     unless( exists $arg_ref->{'Debug'} ) {
 	$arg_ref->{'Debug'} = 0;
     }
@@ -47,11 +52,23 @@ sub initialize($) {
     my $self = shift;
 
     # Get and store shadow copy of state.
-    $self->Apto->send( "get ".$self->DeviceID." hello" );
+    $self->poll();
+
+    return;
+}
+
+
+# Poll for device status/settings and store in internal shadow.
+# Returns the result hash reference too.
+sub poll($) {
+    my $self = shift;
+
+    # Get and store shadow copy of state.
+    $self->Apto->send( "get ".$self->DeviceID." device" );
     $self->Apto->fence();
     $self->AptoDevice( pop @{$self->Apto->Results} );
 
-    return;
+    return $self->AptoDevice();
 }
 
 
@@ -181,6 +198,49 @@ sub switch($$$) {
     return 1;
 }
 
+# Get and return HDMI video status from the first HDMI node found...
+# Optional argument requires the video up or down; loops until timeout.
+sub hdmi_status($) {
+    my $self = shift;
+    my $expect_stable = shift;
+
+    # FIXME: The "source_stable" flag isn't stable.  It gets hung "false."  Using a workaround for now.
+    
+    my $hdmi_status = undef;
+    my $start_time = time();
+
+    do{
+	$hdmi_status = undef;
+
+	# Refresh self-view...
+	$self->poll();
+
+	foreach my $device ( @{$self->AptoDevice->{'devices'}} ) {
+	    foreach my $node ( @{$device->{'nodes'}} ) {
+		if( $node->{'type'} =~ 'HDMI_ENCODER'
+		    ||$node->{'type'} =~ 'HDMI_DECODER' ) {
+		    die "Can't handle more than one HDMI status!"
+			if( defined($hdmi_status) );
+		    $hdmi_status = $node->{'status'};
+		}
+	    }
+	}
+	die "Timeout on waiting for desired video source stability $expect_stable."
+	    if( $self->VideoTimeout() < (time() - $start_time) );
+	sleep 0.5;
+    } until( !defined($expect_stable)
+	     || ( $expect_stable 
+		  && ($hdmi_status->{'video'}->{'height'} > 0) 
+		  && ($hdmi_status->{'video'}->{'height'} <= 4096) )
+	     || ( !$expect_stable
+		  && !( ($hdmi_status->{'video'}->{'height'} > 0) 
+			&& ($hdmi_status->{'video'}->{'height'} <= 4096) ) ));
+
+		
+    ## FIXME: was    || ($expect_stable == $hdmi_status->{'source_stable'}) );
+
+    return $hdmi_status;
+}
 
 # Reboot Device and wait for it come back up.
 sub reboot($) {
