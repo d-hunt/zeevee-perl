@@ -4,3 +4,4 @@ JSON
 Data::Dumper
 String::Escape
 Class::Accessor
+LWP
