@@ -5,3 +5,4 @@ Data::Dumper
 String::Escape
 Class::Accessor
 LWP
+Text::CSV

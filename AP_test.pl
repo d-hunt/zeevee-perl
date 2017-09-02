@@ -31,6 +31,7 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 				       } );
 
 # We must have a single decoder on the test network.
+print "Looking for a single decoder.\n";
 my $rx_device_id = $apto->find_single_device("all_rx");
 print "Using decoder $rx_device_id.\n";
 

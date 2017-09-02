@@ -118,6 +118,56 @@ sub request_events($\@) {
 }
 
 
+# Check if this device is currently connected/active.
+sub is_connected($) {
+    my $self = shift;
+
+    $self->poll();
+
+    return $self->__is_connected();
+}
+
+
+# Internal (no poll) check if this device is currently connected/active.
+sub __is_connected($) {
+    my $self = shift;
+
+    my $error_count = scalar @{$self->AptoDevice()->{'error'}};
+    return 0 unless($error_count == 0);
+
+    foreach my $device ( @{$self->AptoDevice->{'devices'}} ) {
+	return 0 unless($device->{'status'}->{'active'});
+    }
+
+    return 1;
+}
+
+
+# Check this device's core temperature.
+sub temperature($) {
+    my $self = shift;
+
+    $self->poll();
+
+    return $self->__temperature();
+}
+
+
+# Internal (no poll) check this device's temperature.
+sub __temperature($) {
+    my $self = shift;
+
+    my $temperature = undef;
+    foreach my $device ( @{$self->AptoDevice->{'devices'}} ) {
+	die "Can't handle more than one temperature."
+	    if( defined($temperature) );
+	$temperature = $device->{'status'}->{'temperature'}
+    }
+
+    return $temperature;
+}
+
+
 # Use 'send' command to send this device RS232 or infrared data.
 sub send($$$) {
     my $self = shift;
@@ -200,7 +250,7 @@ sub switch($$$) {
 
 # Get and return HDMI video status from the first HDMI node found...
 # Optional argument requires the video up or down; loops until timeout.
-sub hdmi_status($) {
+sub hdmi_status($$) {
     my $self = shift;
     my $expect_stable = shift;
 
