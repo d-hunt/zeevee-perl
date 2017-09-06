@@ -134,6 +134,7 @@ my $current_cycle = 0;
 my $global_start_time = time();
 my $power_state = "OFF";
 my $power_on_time = undef;
+my $last_wake_time = int($global_start_time) + 1;
 while(1) {
     my $current_time = time();
     my $up_time = undef;
@@ -199,7 +200,16 @@ while(1) {
     }
 
     $logfile->flush();
-    sleep 15;
+
+    # Wait for next 5s mark.
+    $last_wake_time += 5;
+    $current_time = time();
+    if($last_wake_time > $current_time) {
+	sleep $last_wake_time - $current_time;
+    } else {
+	$last_wake_time += 5;
+	warn "Fell behind on 5s polls at $current_time.  Buying extra time.";
+    }
 }
 
 # Never reached.
