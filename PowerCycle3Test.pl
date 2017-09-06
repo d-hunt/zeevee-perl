@@ -156,6 +156,7 @@ while(1) {
 	print "Turning on Power.\n";
 	$power_switch->powerOn(1);
 	$power_switch->powerOn(2);
+	$power_switch->powerCycle(5);
 	$power_state = "ON";
 	$power_on_time = time();
 	$current_cycle++;

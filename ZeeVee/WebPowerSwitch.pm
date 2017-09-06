@@ -83,10 +83,21 @@ sub powerOff($$) {
 }
 
 
-# Set power state of an outlet.
+# Cycle power of outlet.
 # Arguments:
 #   outlet number
-#   desired state ("ON"|"OFF")
+sub powerCycle($$) {
+    my $self = shift;
+    my $outlet = shift;
+
+    return $self->setPower($outlet, "CCL");
+}
+
+
+# Set power state of an outlet. (Or power cycle it.)
+# Arguments:
+#   outlet number
+#   desired state ("ON"|"OFF"|"CCL")
 sub setPower($$$) {
     my $self = shift;
     my $outlet = shift;
