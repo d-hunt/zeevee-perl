@@ -248,6 +248,46 @@ sub switch($$$) {
     return 1;
 }
 
+# Find and return an array of nodes or a single node by type.
+# Parameters: A list of 1 or more types to match.
+sub get_node_by_type($;@) {
+    my $self = shift;
+    my @types = ();
+
+    while( my $type = shift ) {
+	push @types, $type;
+    }
+
+    my @nodes = ();
+
+    # Refresh self-view...
+    $self->poll();
+
+    foreach my $device ( @{$self->AptoDevice->{'devices'}} ) {
+	foreach my $node ( @{$device->{'nodes'}} ) {
+	    foreach my $type ( @types ) {
+		if( $node->{'type'} =~ $type ) {
+		    push @nodes, $node;
+		    last; # Only add each node once.
+		}
+	    }
+	}
+    }
+
+    # Called in void context
+    return unless defined(wantarray());
+
+    # Called in list context
+    return @nodes if wantarray();
+
+    # Called in scalar context
+    return undef if scalar(@nodes == 0);
+    return $nodes[0] if scalar(@nodes == 1);
+
+    # Called in scalar context, but found multiple nodes!
+    die("More than one matching node found when called in scalar context.");
+}
+
 # Get and return HDMI video status from the first HDMI node found...
 # Optional argument requires the video up or down; loops until timeout.
 sub hdmi_status($$) {
@@ -262,18 +302,9 @@ sub hdmi_status($$) {
     do{
 	$hdmi_status = undef;
 
-	# Refresh self-view...
-	$self->poll();
-
-	foreach my $device ( @{$self->AptoDevice->{'devices'}} ) {
-	    foreach my $node ( @{$device->{'nodes'}} ) {
-		if( $node->{'type'} =~ 'HDMI_ENCODER'
-		    ||$node->{'type'} =~ 'HDMI_DECODER' ) {
-		    die "Can't handle more than one HDMI status!"
-			if( defined($hdmi_status) );
-		    $hdmi_status = $node->{'status'};
-		}
-	    }
+	my $node = $self->get_node_by_type('HDMI_ENCODER', 'HDMI_DECODER');
+	if( defined($node) ) {
+	    $hdmi_status = $node->{'status'};
 	}
 	die "Timeout on waiting for desired video source stability $expect_stable."
 	    if( $self->VideoTimeout() < (time() - $start_time) );
@@ -290,6 +321,21 @@ sub hdmi_status($$) {
     ## FIXME: was    || ($expect_stable == $hdmi_status->{'source_stable'}) );
 
     return $hdmi_status;
+}
+
+# Get and return Icron USB card status from the first ICRON node found...
+sub icron_status($) {
+    my $self = shift;
+
+    my $icron_status = undef;
+
+    # Matches both _LOCAL and _REMOTE types.
+    my $node = $self->get_node_by_type('USB_ICRON_CHIP_');
+    if( defined($node) ) {
+	$icron_status = $node->{'status'};
+    }
+
+    return $icron_status;
 }
 
 # Reboot Device and wait for it come back up.
