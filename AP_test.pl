@@ -20,6 +20,7 @@ my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
 my $host = '169.254.45.84';
 my $port = 6970;
+my $edid_filename = './zyper-vga-edid.bin';
 my $timeout = 10;
 my $debug = 1;
 my @output = ();
@@ -276,7 +277,7 @@ $result =
 # Display EDID.
 print "Received from EDID: ";
 foreach my $byte (@{$result}) {
-    printf( "0x%x, ", $byte );
+    printf( "0x%02x, ", $byte );
 }
 print "\n";
 
@@ -286,6 +287,80 @@ unless( $result ~~ $expected ) {
     die "Unexpected data read from EDID SEEPROM (U15).  Check: U15, U14\n"
 	.$detail_dump."...";
 }
+
+# Write final VGA port EDID SEEPROM.
+print "Writing VGA EDID SEEPROM.\n";
+# Open and read file.
+my %edid = ('String' => "",
+	    'Data' => [],
+	    'Offset' => 0x00,
+	    'PageSize' => 8,
+	    'MaxLength' => 256);
+open( FILE, "<:raw", $edid_filename )
+    or die "Can't open file $edid_filename.";
+read( FILE, $edid{'String'}, $edid{'MaxLength'} )
+    or die "Error reading from file $edid_filename.";
+close FILE;
+print "Read file $edid_filename.  Length: ".length($edid{'String'})." Bytes.\n";
+
+# Chunk file into page-size arrays.
+foreach my $byte (split('', $edid{'String'})) {
+    if(($edid{'Offset'} % $edid{'PageSize'}) == 0) {
+	push @{$edid{'Data'}}, [];
+    }
+    push @{$edid{'Data'}->[-1]}, ord($byte);
+    $edid{'Offset'}++;
+}
+
+
+# Write/verify EDID one page at a time.
+$edid{'Offset'} = 0x00;
+print "Data read back from EDID:\n";
+foreach my $block (@{$edid{'Data'}}) {
+    # Write EDID.
+    $result =
+	$bridge->i2c_raw( { 'Slave' => 0xA0,
+				'Commands' => [
+				    { 'Command' => 'Write',
+					  'Data' => [($edid{'Offset'}, @{$block})],
+				    },
+				],
+			  } );
+
+    #FIXME: Close this loop!  Wait for SEEPROM write.
+    sleep( 0.05 );
+
+    # Read EDID.
+    $result =
+	$bridge->i2c_raw( { 'Slave' => 0xA0,
+				'Commands' => [
+				    { 'Command' => 'Write',
+					  'Data' => [ $edid{'Offset'},
+					  ]
+				    },
+				    { 'Command' => 'Read',
+					  'Length' => scalar(@{$block}),
+				    },
+				],
+			  } );
+
+    # Display EDID.
+    printf( "\t0x%04x:\t", $edid{'Offset'} );
+    foreach my $byte (@{$result}) {
+	printf( "0x%02x ", $byte );
+    }
+    print "\n";
+
+    # Compare EDID.
+    unless( $result ~~ $block ) {
+	my $detail_dump = Data::Dumper->Dump([$block, $result], ["Expected", "Result"]);
+	die "Unexpected data read from EDID SEEPROM (U15).  Check: U15, U14\n"
+	    .$detail_dump."...";
+    }
+
+    $edid{'Offset'} += scalar(@{$block});
+}
+print "VGA EDID SEEPROM written and verified.\n";
 
 #FIXME: Use this idea?
 # Take away the mask from unused pins 9, 10 so we can toggle...
