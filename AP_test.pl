@@ -520,9 +520,8 @@ $result = <STDIN>;
 print "Checking Master Reset.  Video LED will blink.\n";
 
 # Confirm video is still good before reset.
-$result = $decoder->hdmi_status();
-unless( $result->{'source_stable'} == 1
-	&& $result->{'video'}->{'width'} eq "1920"
+$result = $decoder->hdmi_status(1);
+unless( $result->{'video'}->{'width'} eq "1920"
 	&& $result->{'video'}->{'height'} eq "1080"
 	&& $result->{'video'}->{'scan_mode'} eq "INTERLACED" ) {
     my $detail_dump = Data::Dumper->Dump(['1920x1080 interlaced', $result], ["Expected", "Result"]);
@@ -544,8 +543,7 @@ unless( $result ~~ $expected ) {
 # Wait/Detect if video has gone away.
 $result = $decoder->hdmi_status(0);
 $result = $decoder->hdmi_status(0);  # Had one miss; debounce just in case.
-unless( $result->{'source_stable'} == 0
-	&& $result->{'video'}->{'width'} eq "0"
+unless( $result->{'video'}->{'width'} eq "0"
 	&& $result->{'video'}->{'height'} eq "0" ) {
     my $detail_dump = Data::Dumper->Dump(['0x0 not stable', $result], ["Expected", "Result"]);
     die "Video still there after reset asserted.  Check MSTR_RST_L net.\n"
