@@ -50,13 +50,22 @@ sub new($\%) {
 
 
 # Initialize the UART over Aptovision
-sub initialize($$) {
+sub initialize($$$) {
     my $self = shift;
     my $baudrate = shift // 9600;
+    my $mode = shift // "8N1";
 
     # Init for RS-232 access to add-in card.  Sending RX back to API server.
     $self->Device->switch("RS232:1", $self->Host);
     $self->Device->set_property("nodes[UART:1].configuration.baud_rate", "$baudrate");
+
+    if($mode eq "8N1") {
+	$self->Device->set_property("nodes[UART:1].configuration.parity", "NONE");
+    } elsif($mode eq "8E1") {
+	$self->Device->set_property("nodes[UART:1].configuration.parity", "EVEN");
+    } else {
+	die "Mode not implemented: $mode"
+    }
 
     return;
 }
