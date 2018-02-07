@@ -19,7 +19,7 @@ has Buffer => ( is => "rw" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'Device'} ) {
 	die "UART can't work without a target device.";
     }
@@ -40,11 +40,11 @@ sub new($\%) {
     $arg_ref->{'Apto'} = $arg_ref->{'Device'}->{'Apto'};
 
     $arg_ref->{'Buffer'} = "";
-    
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -91,7 +91,7 @@ sub transmit($$) {
     $tx_escaped = backslash($tx);
     print "Escaped string to transmit: '$tx_escaped'\n"
 	if( $self->Debug > 1 );    
-    
+
     $self->Device->send( "RS232:1", $tx_escaped );
 
     return;
@@ -103,7 +103,7 @@ sub receive($) {
     my $self = shift;
     my $rx = "";
     my $rx_escaped = "";
-    
+
     my @event_ids = $self->Device->poll_events("RS232_RECEIVED");
     my @results = $self->Device->request_events(\@event_ids);
 
@@ -112,11 +112,11 @@ sub receive($) {
 	    $rx_escaped .= $rs232obj->{'rs232_data'};
 	}
     }
-    
+
     print "Escaped string received: '$rx_escaped'\n"
 	if( $self->Debug > 1 );    
     $rx = unbackslash($rx_escaped);
-    
+
     return $rx;
 }
 

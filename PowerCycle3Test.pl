@@ -188,7 +188,7 @@ while(1) {
 		     'HDCP Protected' => JSON_bool_to_YN( $hdmi_status->{'hdcp_protected'} ),
 		     'HDCP Version' => $hdmi_status->{'hdcp_version'},
 	    );
-	
+
 	# Iterate through video_details and add those to data we keep too.
 	foreach my $key (keys %{$hdmi_status->{'video_details'}}) {
 	    my $value = $hdmi_status->{'video_details'}->{"$key"};

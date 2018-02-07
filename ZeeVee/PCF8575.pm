@@ -16,7 +16,7 @@ has WriteMask => ( is => "rw" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'I2C'} ) {
 	die "PCF8575 can't work without a I2C connection to device.  I2C object must provide i2c_raw method.";
     }
@@ -32,11 +32,11 @@ sub new($\%) {
     unless( exists $arg_ref->{'WriteMask'} ) {
 	$arg_ref->{'WriteMask'} = [];
     }
-    
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -67,7 +67,7 @@ sub read($) {
     for( my $bit=0; $bit < 16; $bit++) {
 	$state[$bit] = (($value >> $bit) & 0x01);
     }
-    
+
     return \@state;
 }
 
@@ -101,7 +101,7 @@ sub write($\@;) {
 						  },
 				   ],
 			     } );
-    
+
     # The read acts as a fence!
 
     my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
@@ -109,7 +109,7 @@ sub write($\@;) {
     for( my $bit=0; $bit < 16; $bit++) {
 	$state[$bit] = (($value >> $bit) & 0x01);
     }
-    
+
     return \@state;
 }
 
@@ -135,7 +135,7 @@ sub stream_write($\@) {
 	foreach my $word (@{$stream_ref}) {
 	    my $char_h = ((($word | $mask) >> 8) & 0xff);
 	    my $char_l = ((($word | $mask) >> 0) & 0xff);
-	    
+
 	    if( !defined($current_command) ) {
 		# We need to set up a new write command
 		if( scalar(@{$commands}) ) {
@@ -146,9 +146,9 @@ sub stream_write($\@) {
 		$current_command = { 'Command' => 'Write',
 					 'Data' => [] };
 	    }
-	    
+
 	    push @{$current_command->{'Data'}}, ($char_l, $char_h);
-	    
+
 	    if( scalar(@{$current_command->{'Data'}}) >= $page_size ) {
 		push @{$commands}, $current_command;
 		$current_command = undef;
@@ -173,7 +173,7 @@ sub stream_write($\@) {
     }
 
     $self->I2C->i2c_raw( $i2c_transaction );
-    
+
     return;
 }
 

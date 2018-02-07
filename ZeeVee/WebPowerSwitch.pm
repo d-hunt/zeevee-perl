@@ -20,7 +20,7 @@ has UserAgent => ( is => "rw" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'Host'} ) {
 	$arg_ref->{'Host'} = '169.168.0.100';
     }
@@ -46,7 +46,7 @@ sub new($\%) {
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 

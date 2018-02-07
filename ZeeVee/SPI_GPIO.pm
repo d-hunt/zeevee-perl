@@ -18,7 +18,7 @@ has Stream => ( is => "rw" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'GPIO'} ) {
 	die "SPI_GPIO can't work without a GPIO connection to device.  GPIO object must provide stream_write method.";
     }
@@ -44,11 +44,11 @@ sub new($\%) {
     unless( exists $arg_ref->{'Stream'} ) {
 	$arg_ref->{'Stream'} = [];
     }
-    
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -81,7 +81,7 @@ sub send($) {
     if( scalar(@chunk) ) {
 	$self->GPIO->stream_write(\@chunk);
     }
-    
+
     return;
 }
 
@@ -95,7 +95,7 @@ sub append_stream($$) {
 
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Clock'} );
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Select'} );
-    
+
     foreach my $byte (split '', $string) {
 	$byte = ord($byte);
 	for( my $bit=(8-1); $bit >= 0 ; $bit-- ) {
@@ -114,7 +114,7 @@ sub append_stream($$) {
     }
 
     push @{$self->Stream()}, @stream;
-	
+
     return \@stream;
 }
 
@@ -125,7 +125,7 @@ sub discard_stream($) {
     my @stream = ();
 
     $self->Stream(\@stream);
-    
+
     return \@stream;
 }
 
@@ -138,15 +138,15 @@ sub start_stream($) {
     my $base_gpio = $self->Base();
 
     $self->discard_stream();
-    
+
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Clock'} );
     push @stream, $base_gpio;
-    
+
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Select'} );
     push @stream, $base_gpio;
 
     push @{$self->Stream()}, @stream;
-    
+
     return \@stream;
 }
 
@@ -167,7 +167,7 @@ sub end_stream($) {
     push @stream, $base_gpio;
 
     push @{$self->Stream()}, @stream;
-	
+
     return \@stream;
 }
 
@@ -181,7 +181,7 @@ sub command_stream($\%) {
 
     die "Unexpected command"
 	unless( ($definition->{'Command'} >> 8) == 0 );
-    
+
     $string .= chr($definition->{'Command'});
 
     my $bit=$definition->{'AddressWidth'} // 0;
@@ -196,7 +196,7 @@ sub command_stream($\%) {
 	$string .= chr( 0x00 );
     }
 
-    
+
     return $self->append_stream($string);
 }
 
@@ -209,7 +209,7 @@ sub __set_bit($$$) {
     my $bit = shift;
 
     $byte |= (0x1 << $bit);
-    
+
     return $byte;
 }
 
@@ -222,7 +222,7 @@ sub __clear_bit($$$) {
     my $bit = shift;
 
     $byte &= 0xffff ^ (0x1 << $bit);
-    
+
     return $byte;
 }
 

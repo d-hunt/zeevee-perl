@@ -123,7 +123,7 @@ if($bootloader->connect()) {
     $bootloader->update($flash_base, $data_string);
     print "Verifying MCU.\n";
     $bootloader->verify($flash_base, $data_string);
-    
+
     # Run the application.
     $bootloader->go($flash_base);
 } else {

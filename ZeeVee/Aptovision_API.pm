@@ -25,7 +25,7 @@ has JSON_Template => ( is => "rw" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'Host'} ) {
 	$arg_ref->{'Host'} = '169.254.45.84';
     }
@@ -55,9 +55,9 @@ sub new($\%) {
     $arg_ref->{'Events'} = {};
     $arg_ref->{'Results'} = [];
     $arg_ref->{'Last_Event'} = -1;
-    
+
     my $self = $class->SUPER::new( $arg_ref );
-    
+
     $self->Telnet->open()
 	|| die "Can't open Telnet to ${self->Host}:${self->Port}.";
 
@@ -65,7 +65,7 @@ sub new($\%) {
 	if( $self->Debug >= 1 );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -89,14 +89,14 @@ sub initialize($) {
 sub send($$) {
     my $self = shift;
     my $cmd = shift;
-    
+
     my $previous;
     my $match;
     my $JSRef;
 
     $self->Telnet->print( "$cmd" )
 	|| die "Error sending command: $cmd";
-    
+
     return $self->expect($cmd);
 }
 
@@ -104,7 +104,7 @@ sub send($$) {
 sub expect($$) {
     my $self = shift;
     my $cmd = shift;
-    
+
     my $previous;
     my $match;
     my $JSRef;
@@ -116,7 +116,7 @@ sub expect($$) {
 
     print "%DEBUG: Matched '$match'\n"
 	if( $self->Debug >= 2);
-    
+
     die "Unexpected output received: '$previous'"
 	if($previous);
     die "Unexpected embedded line feed received: '$match'"
@@ -153,7 +153,7 @@ sub expect($$) {
     } else {
 	$unexpected .= "Unimplemented status '".$JSRef->{'status'}."' received.\n";
     }
-    
+
     if( $unexpected ) {
 	my $dumpstring = Data::Dumper->Dump([$JSRef], ["JSRef"]);
 	die "Got an unexpected response on command: $cmd\n"
@@ -171,7 +171,7 @@ sub poll($) {
     my $self = shift;
     my $JSRef = undef;
     my $new_events = 0;
-    
+
     if( $self->Last_Event < 0 ) {
 	$self->send("event");
     } else {
@@ -179,17 +179,17 @@ sub poll($) {
     }
 
     $JSRef = pop @{$self->Results};
-    
+
     die "Unexpected event response."
 	unless( exists( $JSRef->{'events'} ) );
 
     foreach my $event (@{$JSRef->{'events'}}) {
 	die "Event_ID wrapped from large integer.  I don't know how to deal with that."
 	    if( $event->{'event_id'} < ($self->Last_Event - 4096) );
-	
+
 	$self->Last_Event($event->{'event_id'})
 	    if( $event->{'event_id'} > $self->Last_Event );
-	
+
 	unless( exists( $self->{'Events'}->{$event->{'event_id'}} ) ) {
 	    # Only if we aren't aware of this event yet.
 	    $self->{'Events'}->{$event->{'event_id'}} = $event;
@@ -245,7 +245,7 @@ sub fence($) {
     my $self = shift;
     my @fetched_requests = ();
     my $start_time = time();
-    
+
     while( keys %{$self->Requests} ) {
 	foreach my $request_id (sort keys %{$self->Requests}) {
 	    print "Fetching request $request_id.\n"

@@ -33,7 +33,7 @@ has Debug => ( is => "ro" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'UART'} ) {
 	die "DPGlueMCU can't work without a UART connection to device.  UART has to have 'transmit' and 'receive' methods.";
     }
@@ -43,11 +43,11 @@ sub new($\%) {
     unless( exists $arg_ref->{'Debug'} ) {
 	$arg_ref->{'Debug'} = 0;
     }
-    
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -57,7 +57,7 @@ sub initialize($) {
     my $self = shift;
 
     # Nothing yet.
-    
+
     return;
 }
 
@@ -93,7 +93,7 @@ sub gpio($;\@) {
     for( my $bit=0; $bit < 8; $bit++) {
 	$state[$bit] = (($rx >> $bit) & 0x01);
     }
-    
+
     return $state_ref;
 }
 
@@ -123,7 +123,7 @@ sub register($$;$) {
 	    if($self->Timeout() < (time() - $start_time) );
     } while ( $value eq "" );
     $value = ord($value);
-    
+
     return $value;
 }
 
@@ -140,13 +140,13 @@ sub registerset($\@;\@) {
     foreach my $register (@{$register_ref}) {
 	$register = chr($register);
     }
-    
+
     if( defined($value_ref) ) {
 	foreach my $value (@{$value_ref}) {
 	    $value = chr($value);
 	}
     }
-	
+
     if( defined($value_ref) ) {
 	# User wants to set the internal register set.
 	# Construct Write command.
@@ -204,7 +204,7 @@ sub cLVDS_lanes($$) {
     } while ( substr($rx,-1,1) ne "\n" );
 
     warn "Got reply: $rx";
-    
+
     return;
 }
 
@@ -224,7 +224,7 @@ sub start_bootloader($) {
     } while ( substr($rx,-1,1) ne "\n" );
 
     warn "Got reply: $rx";
-    
+
     return;
 }
 
@@ -240,18 +240,18 @@ sub change_baud_rate($$) {
 
     my $brg_h = (((7372800 / $baud_rate) - 16) >> 8) & 0xFF;
     my $brg_l = (((7372800 / $baud_rate) - 16) >> 0) & 0xFF;
- 
+
     my $register_ref = [0x00, 0x01];
     my $value_ref = [$brg_l, $brg_h];
 
     foreach my $register (@{$register_ref}) {
 	$register = chr($register);
     }
-    
+
     foreach my $value (@{$value_ref}) {
 	$value = chr($value);
     }
-	
+
     # Construct Write command.
     my $wr_cmd = "W";
     foreach my $index (keys @{$value_ref}) {

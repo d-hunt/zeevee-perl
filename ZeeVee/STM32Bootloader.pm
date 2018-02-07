@@ -40,7 +40,7 @@ has RXBuffer => ( is => "rw" ); # Because we may receive more than we asked.
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'UART'} ) {
 	croak "Bootloader can't work without a UART connection to device.  UART has to have 'transmit' and 'receive' methods.";
     }
@@ -54,11 +54,11 @@ sub new($\%) {
     unless( exists $arg_ref->{'SupportedCommands'} ) {
 	$arg_ref->{'SupportedCommands'} = [];
     }
-    
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -76,7 +76,7 @@ sub initialize($) {
 			       $DocumentedCommands{"NACK"},
 			       $DocumentedCommands{"Get"},
 			     ]);
-    
+
     return;
 }
 
@@ -92,11 +92,11 @@ sub connect($) {
     # FIXME:
     # FIXME: Do we need to manipulate 8E1 vs 8N1 UART here or elsewhere?
     # FIXME:
-    
+
     # Bootloader uses even parity.  Bitrate is auto-detected.
     $self->UART->initialize(115200, "8E1");
     sleep 0.5;
-    
+
     # Send init/sync command 0x7F.
     my $sync = $self->_command("SYNC");
     if( $self->_send_bytes_ack($sync) ) {
@@ -121,10 +121,10 @@ sub get_version($) {
     # Get at least one more byte (count).
     my $count = ord($self->_expect(1));
     $count++; # Count is 1 short from MCU
-    
+
     # Get the remaining bytes based on count received.
     my $rx = $self->_expect_ack($count);
-    
+
     croak "Unexpected response received from bootloader."
 	unless(defined($rx));
 
@@ -132,10 +132,10 @@ sub get_version($) {
     foreach my $byte ( @bytes ) {
 	$byte = ord($byte);
     }
-    
+
     my $version = shift @bytes;
     printf("MCU Bootloader version: 0x%02x\n", $version);
-    
+
     print "MCU supported commands: ";
     foreach my $byte ( @bytes ) {
 	printf("0x%02x ", $byte);
@@ -143,7 +143,7 @@ sub get_version($) {
 	    unless( $byte ~~ @{$self->SupportedCommands} );
     }
     print "\n";
-    
+
     return 1;
 }
 
@@ -177,7 +177,7 @@ sub go($$) {
 
     # Let the application come to life.
     sleep 1.5;
-    
+
     return 1;
 }
 
@@ -314,7 +314,7 @@ sub write($$$) {
     return 1;
 }
 
-    
+
 # Read block
 # Use the bootloader to read a block of memory.
 # Arguments:
@@ -326,7 +326,7 @@ sub read($$$) {
     my $self = shift;
     my $address = shift;
     my $count = shift;
-        
+
     # Send Command
     $self->_send_command("Read Memory")
 	or croak "Unexpected response from bootloader.";
@@ -360,7 +360,7 @@ sub read($$$) {
 #   1 - Success.
 sub bulk_erase($) {
     my $self = shift;
-        
+
     # Send Command
     $self->_send_command("Extended Erase")
 	or croak "Unexpected response from bootloader.";
@@ -376,7 +376,7 @@ sub bulk_erase($) {
     return 1;
 }
 
-    
+
 # Notes:
 # STBL_DNLOAD(Element.dwAddress, Element.Data, Element.dwDataLength, optimize)
 #  -> STBL_WRITE(Address, MAX_DATA_SIZE, buffer);
@@ -387,7 +387,7 @@ sub bulk_erase($) {
 # STBL_ERASE(0xFFFF, NULL);
 # all to -> Send_RQ();    
 
-    
+
 ###################################################3
 # Internal commands.
 ###################################################3
@@ -490,7 +490,7 @@ sub _send_bytes_ack($@) {
 sub _expect($$) {
     my $self = shift;
     my $expect_bytes = shift // 1; # expect 1 byte by default.
-    
+
     my $start_time = time();
     while ( length($self->RXBuffer) <  $expect_bytes ) {
 	$self->RXBuffer($self->RXBuffer()

@@ -18,7 +18,7 @@ has Timing => ( is => "ro" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'SPI'} ) {
 	die "SPIFlash can't work without a SPI connection to device.";
     }
@@ -41,11 +41,11 @@ sub new($\%) {
 				     'WriteStatusRegister' => 0.015,
 	};
     }
-    
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -55,7 +55,7 @@ sub initialize($) {
     my $self = shift;
 
     # Nothing yet.
-    
+
     return;
 }
 
@@ -93,9 +93,9 @@ sub write_disable($) {
 # Bulk Erase whole Flash.
 sub bulk_erase($) {
     my $self = shift;
-    
+
     $self->write_enable();
-    
+
     $self->SPI->start_stream();
     $self->SPI->command_stream({'Command' => 0xc7 });
     $self->SPI->end_stream();
@@ -112,7 +112,7 @@ sub bulk_erase($) {
 sub page_program($\%) {
     my $self = shift;
     my $description = shift;
-    
+
     my $data = $description->{'Data'};
     my $address = $description->{'Address'};
 
@@ -123,7 +123,7 @@ sub page_program($\%) {
     my $offset = 0;
     while( $offset < length($data) ) {
 	my $page_data = substr($data, $offset, $self->PageSize());
-	
+
 	$self->write_enable();
 
 	$self->SPI->start_stream();
@@ -133,14 +133,14 @@ sub page_program($\%) {
 				   });
 	$self->SPI->append_stream($page_data);
 	$self->SPI->end_stream();
-	    
+
 	$self->SPI->send();
-	
+
 	sleep($self->Timing->{'PageProgram'});
-	
+
 	$offset += $self->PageSize();
     }
-	
+
     return;
 }
 

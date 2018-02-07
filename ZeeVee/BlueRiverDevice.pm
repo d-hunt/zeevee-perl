@@ -19,7 +19,7 @@ has AptoDevice =>  ( is => "rw" );
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
-    
+
     unless( exists $arg_ref->{'DeviceID'} ) {
 	die "BlueRiverDevice can't work without a target deviceID.";
     }
@@ -40,9 +40,9 @@ sub new($\%) {
     }
 
     my $self = $class->SUPER::new( $arg_ref );
-    
+
     $self->initialize();
-    
+
     return $self;
 }
 
@@ -79,9 +79,9 @@ sub poll_events($$) {
     my $event_type = shift;
 
     my @event_ids = ();
-    
+
     $self->Apto->poll();
-    
+
     # Go through events in numerical order
     foreach my $event_id (sort keys %{$self->Apto->Events}) {
 	my $event = $self->Apto->Events->{$event_id};
@@ -90,7 +90,7 @@ sub poll_events($$) {
 	    push @event_ids, $event_id;
 	}
     }
-    
+
     return @event_ids;
 }
 
@@ -102,7 +102,7 @@ sub request_events($\@) {
     my $event_ids = shift;
 
     my @results = ();
-    
+
     # Go through events in numerical order
     foreach my $event_id (@{$event_ids}) {
 	my $event = $self->Apto->Events->{$event_id};
@@ -113,7 +113,7 @@ sub request_events($\@) {
 	push @results, $result;
 	$self->Apto->forget($event_id);
     }
-    
+
     return @results;
 }
 
@@ -173,10 +173,10 @@ sub send($$$) {
     my $self = shift;
     my $port = shift;
     my $data = shift;
-    
+
     $self->Apto->send( "send ".$self->DeviceID." $port $data" );
     pop @{$self->Apto->Results}; # Discard.
-    
+
     # Now wait for the commands to complete, ignoring return values.
     $self->Apto->fence_ignore();
 
@@ -295,7 +295,7 @@ sub hdmi_status($$) {
     my $expect_stable = shift;
 
     # FIXME: The "source_stable" flag isn't stable.  It gets hung "false."  Using a workaround for now.
-    
+
     my $hdmi_status = undef;
     my $start_time = time();
 
@@ -317,7 +317,7 @@ sub hdmi_status($$) {
 		  && !( ($hdmi_status->{'video'}->{'height'} > 0) 
 			&& ($hdmi_status->{'video'}->{'height'} <= 4096) ) ));
 
-		
+
     ## FIXME: was    || ($expect_stable == $hdmi_status->{'source_stable'}) );
 
     return $hdmi_status;
