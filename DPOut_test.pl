@@ -9,13 +9,15 @@ use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
 use ZeeVee::DPGlueMCU;
+use ZeeVee::STM32Bootloader;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '169.254.45.84';
+# my $host = '169.254.45.84';
+my $host = '172.16.1.52';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -73,6 +75,12 @@ my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
 				    Debug => $debug,
 				  } );
 
+# FIXME: Get smarter about this:
+my $bootloader = new ZeeVee::STM32Bootloader( { UART => $uart,
+						Timeout => $timeout,
+						Debug => $debug,
+					      } );
+
 
 # Preparing for non-blocking reads from STDIN.
 my $io_select = IO::Select->new();
@@ -88,17 +96,30 @@ print "BlueRiver Device Die Temperature: "
 
 print "UART glue cLVDS lanes.\n";
 $glue->cLVDS_lanes(2);
-exit 0;
 
 # Attempt to access bootloader.
 print "UART glue attempt to access bootloader...  ";
 $glue->start_bootloader();
 sleep 0.5;
-if($glue->bootloader()) {
+if($bootloader->connect()) {
     print "Success.\n";
-    $glue->get_commands();
-    #$glue->update();
-    $glue->go(0x0800_0000);
+    $bootloader->get_version();
+
+    # Open and read file.
+    my $flash_base = 0x0800_0000;
+    my $filename = "Charlie_DP_GlueMCU.bin";
+    my $max_filesize = (256 * 1024);
+    my $data_string = "";
+    open( FILE, "<:raw", $filename )
+	or die "Can't open file $filename.";
+    read( FILE, $data_string, $max_filesize )
+	or die "Error reading from file $filename.";
+    close FILE;
+    print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
+    $bootloader->update($flash_base, $data_string);
+
+    # Run the application.
+    $bootloader->go($flash_base);
 } else {
     print "Failed.\n";
 }

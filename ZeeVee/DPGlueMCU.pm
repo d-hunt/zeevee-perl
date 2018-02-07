@@ -432,6 +432,17 @@ sub go($$) {
 sub update($) {
     my $self = shift;
 
+    # Notes:
+    # STBL_DNLOAD(Element.dwAddress, Element.Data, Element.dwDataLength, optimize)
+    #  -> STBL_WRITE(Address, MAX_DATA_SIZE, buffer);
+    # STBL_VERIFY(Element.dwAddress, Element.Data, Element.dwDataLength, optimize)
+    #  -> STBL_READ(Address, MAX_DATA_SIZE, buffer);
+    # STBL_WRITE_PERM_UNPROTECT()
+    # STBL_READOUT_PERM_UNPROTECT()
+    # STBL_ERASE(0xFFFF, NULL);
+    # all to -> Send_RQ();
+    
+    
     my $tx_command = "";
     $tx_command .= chr($commands{"Get"});
     $tx_command .= chr(0xff & ~$commands{"Get"});
