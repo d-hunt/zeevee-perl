@@ -7,24 +7,6 @@ use strict;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 
-# Commands.
-# FIXME: move this out of here...  In its own package?
-my %commands = ( "Get" => 0x00,
-		 "Get Version and Read Protection Status" => 0x01,
-		 "Get ID" => 0x02,
-		 "Read Memory" => 0x11,
-		 "Go" => 0x21,
-		 "Write Memory" => 0x31,
-		 "Erase" => 0x43,
-		 "Extended Erase" => 0x44,
-		 "Write Protect" => 0x63,
-		 "Write Unprotect" => 0x73,
-		 "Readout Protect" => 0x82,
-		 "Readout Unprotect" => 0x92,
-		 "SYNC" => 0x7F,
-		 "ACK" => 0x79,
-		 "NACK" => 0x1F,);
-
 has UART => ( is => "ro" );
 has Timeout => ( is => "ro" );
 has Debug => ( is => "ro" );

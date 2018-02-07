@@ -10,7 +10,7 @@ use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use Carp;
 
-$Carp::Verbose = 1; # Force Stack Traces.
+# $Carp::Verbose = 1; # Force Stack Traces.
 
 our %DocumentedCommands = (
     "Get" => 0x00,
