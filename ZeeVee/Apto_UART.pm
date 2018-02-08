@@ -14,6 +14,7 @@ has Host => ( is => "ro" );
 has Timeout => ( is => "ro" );
 has Debug => ( is => "ro" );
 has Buffer => ( is => "rw" );
+has Configuration => ( is => "rw" );
 
 # Constructor for UART object.
 sub new($\%) {
@@ -41,6 +42,8 @@ sub new($\%) {
 
     $arg_ref->{'Buffer'} = "";
 
+    $arg_ref->{'Configuration'} = {};
+
     my $self = $class->SUPER::new( $arg_ref );
 
     $self->initialize();
@@ -53,21 +56,44 @@ sub new($\%) {
 sub initialize($$$) {
     my $self = shift;
     my $baudrate = shift // 9600;
-    my $mode = shift // "8N1";
+    my $mode = shift // "8N1"; # 8N1 unless specified.
+
+    my ($data_bits, $parity, $stop_bits) = ( $mode =~ /^([678])([NOE])([12])$/ )
+	or die "Mode not implemented by Aptovision: $mode";
+
+    $parity = 'NONE' if($parity eq 'N');
+    $parity = 'ODD'  if($parity eq 'O');
+    $parity = 'EVEN' if($parity eq 'E');
 
     # Init for RS-232 access to add-in card.  Sending RX back to API server.
     $self->Device->switch("RS232:1", $self->Host);
-    $self->Device->set_property("nodes[UART:1].configuration.baud_rate", "$baudrate");
 
-    if($mode eq "8N1") {
-	$self->Device->set_property("nodes[UART:1].configuration.parity", "NONE");
-    } elsif($mode eq "8E1") {
-	$self->Device->set_property("nodes[UART:1].configuration.parity", "EVEN");
-    } else {
-	die "Mode not implemented: $mode"
+    # Transmitted to the device.  Also shadows config.
+    $self->configure( { 'baud_rate'     => $baudrate,
+			    'data_bits' => $data_bits,
+			    'parity'    => $parity,
+			    'stop_bits' => $stop_bits,
+		      } );
+    return;
+}
+
+
+# Apply configuration of the UART settings over Aptovision
+# Also shadows configuration
+# Arguments: Hash-ref with Configuration parameters to change.  Other parameters unchanged.
+# Returns: Resulting Configuration as shadowed.
+sub configure($\%) {
+    my $self = shift;
+    my $change_ref = shift // {};
+
+    foreach my $key ( sort keys %{$change_ref} ) {
+	my $value = $change_ref->{$key};
+	# Configuration as transmitted to the device.  It's easier to shadow than query.
+	$self->Configuration->{$key} = $value;
+	$self->Device->set_property("nodes[UART:1].configuration.$key", "$value");
     }
 
-    return;
+    return $self->Configuration();
 }
 
 
@@ -76,9 +102,21 @@ sub set_baud_rate($$) {
     my $self = shift;
     my $baudrate = shift;
 
-    $self->initialize($baudrate);
+    # Only change baud rate.  Leave everything else unchanged.
+    $self->configure( {'baud_rate' => $baudrate } );
 
     return;
+}
+
+
+# Gets baud rate.
+sub get_baud_rate($) {
+    my $self = shift;
+    my $baudrate = 0;
+
+    $self->initialize($baudrate);
+
+    return $baudrate;
 }
 
 

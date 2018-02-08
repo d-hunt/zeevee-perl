@@ -33,6 +33,8 @@ our %DocumentedCommands = (
 has UART => ( is => "ro" );
 has Timeout => ( is => "ro" );
 has Debug => ( is => "ro" );
+has ConnectionState => ( is => "rw" );
+has OriginalUARTConfig => ( is => "rw" );
 has SupportedCommands => ( is => "rw" );
 has RXBuffer => ( is => "rw" ); # Because we may receive more than we asked.
 
@@ -41,8 +43,23 @@ sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
 
+    $arg_ref = $class->_preInitialize($arg_ref);  # Get Defaults.
+
+    my $self = $class->SUPER::new($arg_ref, @_);  # Call the Class::Accessor constructor
+
+    $self->_initialize();  # Call any internal initialization
+
+    return $self;
+}
+
+
+# Initialize operations before object has been created.
+sub _preInitialize($;\%) {
+    my $class = shift;
+    my $arg_ref = shift;
+
     unless( exists $arg_ref->{'UART'} ) {
-	croak "Bootloader can't work without a UART connection to device.  UART has to have 'transmit' and 'receive' methods.";
+	croak "Bootloader can't work without a UART connection to device.  UART has to have 'transmit', 'receive', 'configure' and 'Configuration' methods.";
     }
     unless( exists $arg_ref->{'Timeout'} ) {
 	$arg_ref->{'Timeout'} = 10;
@@ -55,22 +72,21 @@ sub new($\%) {
 	$arg_ref->{'SupportedCommands'} = [];
     }
 
-    my $self = $class->SUPER::new( $arg_ref );
-
-    $self->initialize();
-
-    return $self;
+    return $arg_ref;
 }
 
 
-# Any initialization necessary.
-sub initialize($) {
+# Any initialization necessary after object creation.
+sub _initialize($) {
     my $self = shift;
+
+    # Start disconnected; Do not automatically connect!
+    $self->ConnectionState("Disconnected");
 
     # Start with empty RX Buffer.
     $self->RXBuffer("");
 
-    # Start with some assumptions about Supported commands.
+    # Start with some assumptions about minimal Supported commands.
     $self->SupportedCommands([ $DocumentedCommands{"SYNC"},
 			       $DocumentedCommands{"ACK"},
 			       $DocumentedCommands{"NACK"},
@@ -89,24 +105,65 @@ sub initialize($) {
 sub connect($) {
     my $self = shift;
 
-    # FIXME:
-    # FIXME: Do we need to manipulate 8E1 vs 8N1 UART here or elsewhere?
-    # FIXME:
+    # Short circuit if we're already connected.
+    return 1
+	if $self->is_connected();
 
     # Bootloader uses even parity.  Bitrate is auto-detected.
-    $self->UART->initialize(115200, "8E1");
+    $self->ConnectionState("Trying");
+    $self->OriginalUARTConfig($self->UART->Configuration());
+    $self->UART->configure( { 'baud_rate'     => 115200,
+				  'data_bits' => 8,
+				  'parity'    => "EVEN",
+				  'stop_bits' => 1,
+			    } );
     sleep 0.5;
 
     # Send init/sync command 0x7F.
     my $sync = $self->_command("SYNC");
     if( $self->_send_bytes_ack($sync) ) {
+	$self->ConnectionState("Connected");
 	return 1;
     } else {
-	# That didn't work.  Put the UART mode back.
-	# FIXME: hack w/ hard-coding.
-	$self->UART->initialize(9600, "8N1");
+	# That didn't work.  Clean up and put the UART mode back.
+	$self->disconnect();
 	return 0;
     }
+}
+
+
+# Bootloader Disconnect
+# Revert UART settings and block from further access.
+sub disconnect($) {
+    my $self = shift;
+
+    # Only do this if we're connected.
+    return 1
+	unless $self->is_connected();
+
+    $self->UART->configure($self->OriginalUARTConfig());
+    $self->OriginalUARTConfig(undef);
+    $self->ConnectionState("Disconnected");
+    sleep 0.5;
+
+    return 1;
+}
+
+
+# Bootloader connection state
+# Returns:
+#  1 - Connected. (Or trying.)
+#  0 - Not connected.
+sub is_connected($) {
+    my $self = shift;
+
+    return 1
+	if ( $self->ConnectionState eq 'Connected' );
+
+    return 1
+	if ( $self->ConnectionState eq 'Trying' );
+
+    return 0;
 }
 
 
@@ -171,12 +228,11 @@ sub go($$) {
     $self->_send_bytes_ack(@tx)
 	or croak "Unexpected response from bootloader.";
 
-    # Put the UART mode back for application code.
-    # FIXME: hack w/ hard-coding.
-    $self->UART->initialize(9600, "8N1");
+    # Clean up and Put the UART mode back for application code.
+    $self->disconnect();
 
     # Let the application come to life.
-    sleep 1.5;
+    sleep 1;
 
     return 1;
 }
@@ -277,9 +333,9 @@ sub verify($$$) {
 sub write($$$) {
     my $self = shift;
     my $address = shift;
-    my $data = shift;
+    my $data_string = shift;
 
-    my @data = split(//, $data);
+    my @data = split(//, $data_string);
     foreach my $byte ( @data ) {
 	$byte = ord($byte);
     }
@@ -454,6 +510,9 @@ sub _send_string_ack($$) {
     my $self = shift;
     my $tx = shift;
 
+    croak "Not connected to bootloader."
+	unless $self->is_connected();
+
     $self->UART->transmit($tx);
 
     # Expect an ACK response, but nothing else.
@@ -490,6 +549,9 @@ sub _send_bytes_ack($@) {
 sub _expect($$) {
     my $self = shift;
     my $expect_bytes = shift // 1; # expect 1 byte by default.
+
+    croak "Not connected to bootloader."
+	unless $self->is_connected();
 
     my $start_time = time();
     while ( length($self->RXBuffer) <  $expect_bytes ) {
