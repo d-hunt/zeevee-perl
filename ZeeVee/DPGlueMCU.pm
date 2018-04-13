@@ -241,6 +241,125 @@ sub start_bootloader($) {
 }
 
 
+# DP RX Enter Programming mode.
+sub DPRX_program_enable($) {
+    my $self = shift;
+
+    # Go into program mode and verify.
+    $self->UART->transmit( "DPRXProgramEnableP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( $rx ne "DPRX Program.\n" );
+
+    warn "Received: $rx.";
+
+    return;
+}
+
+
+# DP RX Exit Programming mode.
+sub DPRX_program_disable($) {
+    my $self = shift;
+
+    # Get out of program mode and verify.
+    $self->UART->transmit( "DPRXProgramDisableP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( $rx ne "End DPRX Program.\n" );
+
+    warn "Received: $rx.";
+
+    return;
+}
+
+
+# Write DP RX program block.
+# Parameters: BlockAddress, Block to Write.
+sub DPRX_program_block($$$) {
+    my $self = shift;
+    my $address = shift;
+    my $block = shift;
+
+    # Go into binary transfer mode and verify.
+    $self->UART->transmit( "DPRXProgramP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( $rx ne "?" );
+
+    # Now GlueMCU is waiting for the payload.
+    # Construct payload: Address (32-bit, MSB first) + Binary Block.
+    my $tx = "";
+    my $bits=32;
+    while( $bits > 0 ) {
+	$bits -= 8;
+	$tx .= chr(($address>>$bits) & 0xFF);
+    }
+    $tx .= $block;
+
+    # Send payload.
+    warn "Sending Payload.";
+    $self->UART->transmit($tx);
+
+    # Verify end of Binary transfer mode.
+    $rx = "";
+    $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( substr($rx,-5) ne "End.\n" );
+
+    warn "Received: $rx.";
+
+    return;
+}
+
+
+# Write DP RX program.
+# Parameters: StartAddress, Data to Write.
+sub DPRX_program($$$) {
+    my $self = shift;
+    my $address = shift;
+    my $data_string = shift;
+
+    # Split to 512-byte blocks.
+    my @blocks = unpack("(A512)*", $data_string);
+
+    warn "Length: ".length($data_string)." Blocks: ".scalar(@blocks)."\n";
+
+    $self->DPRX_program_enable();
+
+    # Program all 512-byte blocks.
+    foreach my $block (@blocks) {
+	$block .= chr(0xFF)
+	    while length($block) < 512;
+	print ".";
+	$self->DPRX_program_block($address, $block);
+	$address += 512;
+    }
+
+    $self->DPRX_program_disable();
+
+    return;
+}
+
+
+
 # Change baud rate; it's tricky because:
 #  - Aptovision API seems to be faster changing Baud rate than transmitting!
 # Takes baud rate.
