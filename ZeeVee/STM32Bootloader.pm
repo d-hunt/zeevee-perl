@@ -110,14 +110,16 @@ sub connect($) {
 	if $self->is_connected();
 
     # Bootloader uses even parity.  Bitrate is auto-detected.
+    # Make sure to make a copy of the UART->Configuration()!
     $self->ConnectionState("Trying");
-    $self->OriginalUARTConfig($self->UART->Configuration());
+    $self->OriginalUARTConfig( { %{$self->UART->Configuration()} } );
     $self->UART->configure( { 'baud_rate'     => 115200,
 				  'data_bits' => 8,
 				  'parity'    => "EVEN",
 				  'stop_bits' => 1,
 			    } );
-    sleep 0.5;
+    # Flush any potential garbage characters.
+    $self->UART->receive();
 
     # Send init/sync command 0x7F.
     my $sync = $self->_command("SYNC");
@@ -144,7 +146,8 @@ sub disconnect($) {
     $self->UART->configure($self->OriginalUARTConfig());
     $self->OriginalUARTConfig(undef);
     $self->ConnectionState("Disconnected");
-    sleep 0.5;
+    # Flush any potential garbage characters.
+    $self->UART->receive();
 
     return 1;
 }
@@ -230,9 +233,6 @@ sub go($$) {
 
     # Clean up and Put the UART mode back for application code.
     $self->disconnect();
-
-    # Let the application come to life.
-    sleep 1;
 
     return 1;
 }

@@ -2,10 +2,15 @@
 package ZeeVee::DPGlueMCU;
 use Class::Accessor "antlers";
 
-use warnings;
 use strict;
+use warnings;
+no warnings 'experimental::smartmatch';
+
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
+use Carp;
+
+# $Carp::Verbose = 1; # Force Stack Traces.
 
 has UART => ( is => "ro" );
 has Timeout => ( is => "ro" );
@@ -17,7 +22,7 @@ sub new($\%) {
     my $arg_ref = shift // {};
 
     unless( exists $arg_ref->{'UART'} ) {
-	die "DPGlueMCU can't work without a UART connection to device.  UART has to have 'transmit' and 'receive' methods.";
+	croak "DPGlueMCU can't work without a UART connection to device.  UART has to have 'transmit' and 'receive' methods.";
     }
     unless( exists $arg_ref->{'Timeout'} ) {
 	$arg_ref->{'Timeout'} = 10;
@@ -38,9 +43,33 @@ sub new($\%) {
 sub initialize($) {
     my $self = shift;
 
-    # Nothing yet.
+    $self->flush_tx();
+    my $rx = $self->flush_rx();
+    warn "Received and discarded on UART: $rx"
+	if(length($rx) > 0);
 
     return;
+}
+
+
+# Compel the Glue MCU to flush its command buffer.
+sub flush_tx($) {
+    my $self = shift;
+
+    $self->UART->transmit("P");
+    sleep 0.5;  # Wait in case there is a response in flight.
+
+    return;
+}
+
+
+# Receive whatever may be in UART buffer.
+# Return it, but with the intention of discarding it.
+sub flush_rx($) {
+    my $self = shift;
+
+    my $rx = $self->UART->receive();
+    return $rx;
 }
 
 
@@ -66,7 +95,7 @@ sub gpio($;\@) {
     my $start_time = time();
     do {
 	$rx .= $self->UART->receive();
-	die "Timeout waiting to receive byte from UART."
+	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
     } while ( $rx eq "" );
     $rx = ord($rx);
@@ -101,7 +130,7 @@ sub register($$;$) {
     my $start_time = time();
     do {
 	$value .= $self->UART->receive();
-	die "Timeout waiting to receive byte from UART."
+	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
     } while ( $value eq "" );
     $value = ord($value);
@@ -154,7 +183,7 @@ sub registerset($\@;\@) {
     my $start_time = time();
     do {
 	$value_string .= $self->UART->receive();
-	die "Timeout waiting to receive N bytes from UART."
+	croak "Timeout waiting to receive N bytes from UART."
 	    if($self->Timeout() < (time() - $start_time) );
     } while ( length($value_string) < scalar(@{$register_ref}) );
 
@@ -181,7 +210,7 @@ sub cLVDS_lanes($$) {
     my $start_time = time();
     do {
 	$rx .= $self->UART->receive();
-	die "Timeout waiting to receive byte from UART."
+	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
     } while ( substr($rx,-1,1) ne "\n" );
 
@@ -201,9 +230,10 @@ sub start_bootloader($) {
     my $start_time = time();
     do {
 	$rx .= $self->UART->receive();
-	die "Timeout waiting to receive byte from UART."
+	carp "Timeout waiting to receive byte from UART.  Going on anyway..."
 	    if($self->Timeout() < (time() - $start_time) );
-    } while ( substr($rx,-1,1) ne "\n" );
+    } while ( substr($rx,-1,1) ne "\n"
+	      && $self->Timeout() >= (time() - $start_time));
 
     warn "Got reply: $rx";
 
@@ -251,7 +281,7 @@ sub change_baud_rate($$) {
     # Verify successful transition to new baud rate.
     $value_ref = $self->registerset([0x00, 0x01]);
 
-    die "Baud rate doesn't appear to be what we set!"
+    croak "Baud rate doesn't appear to be what we set!"
 	unless( ($value_ref->[0] eq $brg_l)
 		&& ($value_ref->[1] eq $brg_h) );
 

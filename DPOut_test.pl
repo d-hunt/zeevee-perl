@@ -34,7 +34,7 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 # We must have a single encoder on the test network.
 print "Looking for a single encoder.\n";
 my $tx_device_id = $apto->find_single_device("all_tx");
-print "Using decoder $tx_device_id.\n";
+print "Using encoder $tx_device_id.\n";
 
 my $encoder = new ZeeVee::BlueRiverDevice( { DeviceID => $tx_device_id,
 					     Apto => $apto,
@@ -43,7 +43,7 @@ my $encoder = new ZeeVee::BlueRiverDevice( { DeviceID => $tx_device_id,
 					     Debug => $debug,
 					   } );
 
-# Determine the encoder to use for this test.
+# Determine the decoder to use for this test.
 if( $id_mode eq "NEWDEVICE" ) {
     print "Waiting for a new decoder device...\n";
     $device_id = $apto->wait_for_new_device("all_rx");
@@ -55,7 +55,7 @@ if( $id_mode eq "NEWDEVICE" ) {
 } else {
     die "Unimlemented ID mode: $id_mode.";
 }
-print "Using encoder (DUT) $device_id.\n";
+print "Using decoder (DUT) $device_id.\n";
 
 my $decoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
 					     Apto => $apto,
@@ -94,44 +94,7 @@ print "BlueRiver Device Die Temperature: "
     .$decoder->temperature()
     ."\n";
 
-print "UART glue cLVDS lanes.\n";
-$glue->cLVDS_lanes(2);
-
-# Attempt to access bootloader.
-print "UART glue attempt to access bootloader...  ";
-$glue->start_bootloader();
-sleep 0.5;
-if($bootloader->connect()) {
-    print "Success.\n";
-    $bootloader->get_version();
-
-    # Open and read file.
-    my $flash_base = 0x0800_0000;
-    my $filename = "Charlie_DP_GlueMCU.bin";
-    my $max_filesize = (256 * 1024);
-    my $data_string = "";
-    open( FILE, "<:raw", $filename )
-	or die "Can't open file $filename.";
-    read( FILE, $data_string, $max_filesize )
-	or die "Error reading from file $filename.";
-    close FILE;
-    print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
-
-    print "Erasing MCU.\n";
-    $bootloader->bulk_erase();
-    print "Updating MCU.\n";
-    $bootloader->update($flash_base, $data_string);
-    print "Verifying MCU.\n";
-    $bootloader->verify($flash_base, $data_string);
-
-    # Run the application.
-    $bootloader->go($flash_base);
-} else {
-    print "Failed.\n";
-}
-
 print "UART glue lane thrash check.\n";
-
 $glue->cLVDS_lanes(8);
 sleep 1;
 $glue->cLVDS_lanes(4);
@@ -139,6 +102,8 @@ sleep 1;
 $glue->cLVDS_lanes(2);
 sleep 1;
 $glue->cLVDS_lanes(1);
+sleep 1;
+$glue->cLVDS_lanes(2);
 sleep 1;
 
 
@@ -183,6 +148,6 @@ $decoder->join($encoder->DeviceID.":HDMI:0",
 #$encoder->set_property("nodes[HDMI_DECODER:0].inputs[main:0].configuration.source.value", "1");
 
 
-print "=== DONE. DeviceID = ".$encoder->DeviceID()."===\n";
+print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 
 exit 0;
