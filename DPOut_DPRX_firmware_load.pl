@@ -57,7 +57,7 @@ my $uart = new ZeeVee::Apto_UART( { Device => $decoder,
 				  } );
 
 my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
-				    Timeout => $timeout,
+				    Timeout => 30, #$timeout,
 				    Debug => $debug,
 				  } );
 
@@ -85,11 +85,11 @@ read( FILE, $data_string, $max_filesize )
 close FILE;
 print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
 
-print "Updating EP9169 MCU.\n";
+print "Updating EP9169S MCU.\n";
 $glue->DPRX_program($flash_base, $data_string);
-#print "Verifying MCU.\n";
-#$glue->verify_DPRX($flash_base, $data_string)
-#    or die "Read/Verify failed!";
+print "Verifying EP9169S MCU.\n";
+$glue->DPRX_verify($flash_base, $data_string)
+    or die "Read/Verify failed!";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 

@@ -15,6 +15,9 @@ use Carp;
 has UART => ( is => "ro" );
 has Timeout => ( is => "ro" );
 has Debug => ( is => "ro" );
+has BinaryAddressBits => ( is => "ro" );
+has BinaryEntryString => ( is => "ro" );
+has BinaryExitString => ( is => "ro" );
 
 # Constructor for DPGlueMCU object.
 sub new($\%) {
@@ -30,6 +33,15 @@ sub new($\%) {
     unless( exists $arg_ref->{'Debug'} ) {
 	$arg_ref->{'Debug'} = 0;
     }
+    unless( exists $arg_ref->{'BinaryAddressBits'} ) {
+	$arg_ref->{'BinaryAddressBits'} = 32;
+    }
+    unless( exists $arg_ref->{'BinaryEntryString'} ) {
+	$arg_ref->{'BinaryEntryString'} = "?";
+    }
+    unless( exists $arg_ref->{'BinaryExitString'} ) {
+	$arg_ref->{'BinaryExitString'} = "End.\n";
+    }
 
     my $self = $class->SUPER::new( $arg_ref );
 
@@ -42,6 +54,12 @@ sub new($\%) {
 # Any initialization necessary.
 sub initialize($) {
     my $self = shift;
+
+    $self->UART->configure( { 'baud_rate'     => 9600,
+				  'data_bits' => 8,
+				  'parity'    => "NONE",
+				  'stop_bits' => 1,
+			    } );
 
     $self->flush_tx();
     my $rx = $self->flush_rx();
@@ -242,11 +260,11 @@ sub start_bootloader($) {
 
 
 # DP RX Enter Programming mode.
-sub DPRX_program_enable($) {
+sub EP_BB_program_enable_DPRX($) {
     my $self = shift;
 
     # Go into program mode and verify.
-    $self->UART->transmit( "DPRXProgramEnableP" );
+    $self->UART->transmit( "ExploreBBprogramDpRxP" );
 
     my $rx = "";
     my $start_time = time();
@@ -254,7 +272,7 @@ sub DPRX_program_enable($) {
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
-    } while ( $rx ne "DPRX Program.\n" );
+    } while ( $rx ne "BB Program DPRX.\n" );
 
     warn "Received: $rx.";
 
@@ -262,12 +280,33 @@ sub DPRX_program_enable($) {
 }
 
 
-# DP RX Exit Programming mode.
-sub DPRX_program_disable($) {
+# HDMI Splitter Enter Programming mode.
+sub EP_BB_program_enable_Splitter($) {
+    my $self = shift;
+
+    # Go into program mode and verify.
+    $self->UART->transmit( "ExploreBBprogramSplitter" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( $rx ne "BB Program Splitter.\n" );
+
+    warn "Received: $rx.";
+
+    return;
+}
+
+
+# Explore BootBlock Exit Programming mode.
+sub EP_BB_program_disable($) {
     my $self = shift;
 
     # Get out of program mode and verify.
-    $self->UART->transmit( "DPRXProgramDisableP" );
+    $self->UART->transmit( "ExploreBBprogramDisableP" );
 
     my $rx = "";
     my $start_time = time();
@@ -275,7 +314,7 @@ sub DPRX_program_disable($) {
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
-    } while ( $rx ne "End DPRX Program.\n" );
+    } while ( $rx ne "End BB Program.\n" );
 
     warn "Received: $rx.";
 
@@ -283,15 +322,15 @@ sub DPRX_program_disable($) {
 }
 
 
-# Write DP RX program block.
+# Write Explore BootBlock program a block.
 # Parameters: BlockAddress, Block to Write.
-sub DPRX_program_block($$$) {
+sub EP_BB_program_block($$$) {
     my $self = shift;
     my $address = shift;
     my $block = shift;
 
     # Go into binary transfer mode and verify.
-    $self->UART->transmit( "DPRXProgramP" );
+    $self->UART->transmit( "ExploreBBprogramP" );
 
     my $rx = "";
     my $start_time = time();
@@ -299,12 +338,12 @@ sub DPRX_program_block($$$) {
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
-    } while ( $rx ne "?" );
+    } while ( $rx ne $self->BinaryEntryString() );
 
     # Now GlueMCU is waiting for the payload.
     # Construct payload: Address (32-bit, MSB first) + Binary Block.
     my $tx = "";
-    my $bits=32;
+    my $bits=$self->BinaryAddressBits();
     while( $bits > 0 ) {
 	$bits -= 8;
 	$tx .= chr(($address>>$bits) & 0xFF);
@@ -312,21 +351,169 @@ sub DPRX_program_block($$$) {
     $tx .= $block;
 
     # Send payload.
-    warn "Sending Payload.";
     $self->UART->transmit($tx);
 
     # Verify end of Binary transfer mode.
+    my $address_bytes=$self->BinaryAddressBits() / 8;
     $rx = "";
     $start_time = time();
     do {
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
-    } while ( substr($rx,-5) ne "End.\n" );
+    } until ( length($rx) >= (length($block) + $address_bytes)
+	      && ( substr( $rx, -1*length($self->BinaryExitString()) )
+		   eq $self->BinaryExitString() ) );
 
-    warn "Received: $rx.";
+    # Verify the received address is exactly as expected.
+    croak "Address received does not match address sent!"
+	unless( substr($tx,0,$address_bytes)
+		eq substr($rx,0,$address_bytes) );
+
+    # Verify the received data was exactly as sent. (This is just the transmission)
+    # We do this one printable chunk at a time.
+    my $chunk_size = 16;
+    my $offset = $address_bytes;
+    while( $offset < length($tx) ) {
+	# Gather next block of data to verify.
+	my $written = substr($tx, $offset, $chunk_size);
+	# Gather corresponding block as read from DPRX.
+	my $read = substr($rx, $offset, $chunk_size);
+
+	# Check they match.
+	if ($read ne $written) {
+	    printf( "Mismatch at 0x%08x:\n", ($address+$offset-$address_bytes) );
+	    print "W: ";
+	    foreach my $ch (split(//, $written)) {
+		printf( "%02x ", ord($ch) );
+	    }
+	    print "\n";
+	    print "R: ";
+	    foreach my $ch (split(//, $read)) {
+		printf( "%02x ", ord($ch) );
+	    }
+	    print "\n";
+	}
+
+	$offset += $chunk_size;
+    }
+
+    croak "Write error: mismatch between sent and received data."
+	unless( substr($tx, $address_bytes, length($block))
+		eq substr($rx, $address_bytes, length($block)) );
 
     return;
+}
+
+
+# Explore BootBlock read back a block of firmare code.
+# Parameter: BlockAddress.
+# Returns: Received block.
+sub EP_BB_read_block($$) {
+    my $self = shift;
+    my $address = shift;
+    my $expected_length = 512; # To guard against unexpected match.
+
+    # Go into binary read mode and verify transition.
+    $self->UART->transmit( "ExploreBBReadP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( $rx ne $self->BinaryEntryString() );
+
+    # Now GlueMCU is waiting for the payload (address).
+    # Construct payload: Address (32-bit, MSB first.)
+    my $tx = "";
+    my $bits=$self->BinaryAddressBits();
+    while( $bits > 0 ) {
+	$bits -= 8;
+	$tx .= chr(($address>>$bits) & 0xFF);
+    }
+
+    # Send payload.
+    $self->UART->transmit($tx);
+
+    # Now GlueMCU is sending its payload.
+    # Payload: Address (32-bit, MSB first) + Binary Block.
+
+    # Read until end of Binary transfer mode.
+    my $address_bytes=$self->BinaryAddressBits() / 8;
+    $rx = "";
+    $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } until ( length($rx) >= ($expected_length + $address_bytes)
+	      && ( substr( $rx, -1*length($self->BinaryExitString()) )
+		   eq $self->BinaryExitString() ) );
+
+    # Verify the received address is exactly as expected.
+    croak "Address received does not match address sent!"
+	unless( substr($tx,0,$address_bytes)
+		eq substr($rx,0,$address_bytes) );
+
+    # Trim out only the binary block.
+    # Skipping address in beginning.
+    # Skipping binary transfer end marker.
+    my $block = substr( $rx,
+			$address_bytes,
+			-1*length($self->BinaryExitString()) ); 
+
+    return $block;
+}
+
+
+# Explore BootBlock write program.
+# Parameters: StartAddress, Data to Write.
+sub EP_BB_program($$$) {
+    my $self = shift;
+    my $address = shift;  # Address in User flash area; Starts after BB.
+    my $data_string = shift;
+
+    # Split to 512-byte blocks.
+    my @blocks = unpack("(a512)*", $data_string);
+
+    warn "Length: ".length($data_string)." Blocks: ".scalar(@blocks)."\n";
+
+    # Program all 512-byte blocks.
+    $| = 1;    # Autoflush
+    foreach my $block (@blocks) {
+	$block .= chr(0xFF)
+	    while length($block) < 512;
+	print ".";
+	$self->EP_BB_program_block($address, $block);
+	$address += 512;
+    }
+    $| = 0;    # Disable Autoflush
+
+    return;
+}
+
+
+# Explore BootBlock read program.
+# Parameters: StartAddress, Length to read.
+# Returns: Read data.
+sub EP_BB_read($$$) {
+    my $self = shift;
+    my $address = shift;  # Address in User flash area; Starts after BB.
+    my $length = shift // 0xF000;
+    my $data_string = "";
+
+    # Read all in 512-byte blocks.
+    $| = 1;    # Autoflush
+    while( length($data_string) < $length ) {
+	print ".";
+	$data_string .= $self->EP_BB_read_block($address);
+	$address += 512;
+    }
+    $| = 0;    # Disable Autoflush
+
+    return $data_string;
 }
 
 
@@ -334,30 +521,102 @@ sub DPRX_program_block($$$) {
 # Parameters: StartAddress, Data to Write.
 sub DPRX_program($$$) {
     my $self = shift;
-    my $address = shift;
+    my $address = shift // 0x0000;
     my $data_string = shift;
+    my $max_datasize = (0xF800-0x1000);
 
-    # Split to 512-byte blocks.
-    my @blocks = unpack("(A512)*", $data_string);
+    # $address: Address in User flash area; Starts after BB.
+    # 0x0000 here goes in 0x1000 on device address space.
 
-    warn "Length: ".length($data_string)." Blocks: ".scalar(@blocks)."\n";
+    croak "Data too long for EP9169S."
+	if (length($data_string) > $max_datasize);
 
-    $self->DPRX_program_enable();
-
-    # Program all 512-byte blocks.
-    foreach my $block (@blocks) {
-	$block .= chr(0xFF)
-	    while length($block) < 512;
-	print ".";
-	$self->DPRX_program_block($address, $block);
-	$address += 512;
-    }
-
-    $self->DPRX_program_disable();
+    $self->EP_BB_program_enable_DPRX();
+    $self->EP_BB_program($address, $data_string);
+    $self->EP_BB_program_disable();
 
     return;
 }
 
+
+# Read DP RX program.
+# Parameters: StartAddress, Length to read.
+# Returns: Read data.
+sub DPRX_read($$$) {
+    my $self = shift;
+    my $address = shift // 0x0000;  # Address in User flash area; Starts after BB.
+    my $length = shift // 0xF000;
+    my $data_string = "";
+
+    # Address in User flash area; Starts after BB.
+    # 0x0000 here goes in 0x1000 on device address space.
+
+    croak "Read out of bounds for EP9169S."
+	if( ($address + $length) > 0x10000);
+
+
+    $self->EP_BB_program_enable_DPRX();
+    $data_string = $self->EP_BB_read($address, $length);
+    $self->EP_BB_program_disable();
+
+    return $data_string;
+}
+
+
+# Verify DP RX program.
+# Parameters:
+#   Address to start Verify
+#   Data String to verify against.
+# Returns:
+#   1 - Successful verify
+#   0 - At least one mismatch.
+sub DPRX_verify($$$) {
+    my $self = shift;
+    my $address = shift;
+    my $golden_data = shift;
+
+    my $block_size = 16;
+
+    # Read from DP RX same length of data as golden.
+    my $read_data = $self->DPRX_read($address, length($golden_data));
+
+    my $good_count = 0;
+    my $bad_count = 0;
+
+    # Read and verify data one printable block at a time.
+    my $offset = 0;
+    while( $offset < length($golden_data) ) {
+	# Gather next block of data to verify.
+	my $golden_block = substr($golden_data, $offset, $block_size);
+	# Gather corresponding block as read from DPRX.
+	my $read_block = substr($read_data, $offset, $block_size);
+
+	# Check they match.
+	if ($read_block eq $golden_block) {
+	    $good_count++;
+	} else {
+	    $bad_count++;
+	    printf( "Mismatch at 0x%08x:\n", ($address+$offset) );
+	    print "Written: ";
+	    foreach my $ch (split(//, $golden_block)) {
+		printf( "%02x ", ord($ch) );
+	    }
+	    print "\n";
+	    print "Read   : ";
+	    foreach my $ch (split(//, $read_block)) {
+		printf( "%02x ", ord($ch) );
+	    }
+	    print "\n";
+	}
+
+	$offset += $block_size;
+    }
+
+    print "Verified: $good_count good blocks; $bad_count bad blocks.\n";
+
+    return 0 if($bad_count);
+    return 1;
+}
 
 
 # Change baud rate; it's tricky because:
