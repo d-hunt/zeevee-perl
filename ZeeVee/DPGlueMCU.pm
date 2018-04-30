@@ -285,7 +285,7 @@ sub EP_BB_program_enable_Splitter($) {
     my $self = shift;
 
     # Go into program mode and verify.
-    $self->UART->transmit( "ExploreBBprogramSplitter" );
+    $self->UART->transmit( "ExploreBBprogramSplitterP" );
 
     my $rx = "";
     my $start_time = time();
@@ -322,7 +322,7 @@ sub EP_BB_program_disable($) {
 }
 
 
-# Write Explore BootBlock program a block.
+# Write Explore BootBlock program a block of firmware code.
 # Parameters: BlockAddress, Block to Write.
 sub EP_BB_program_block($$$) {
     my $self = shift;
@@ -377,7 +377,7 @@ sub EP_BB_program_block($$$) {
     while( $offset < length($tx) ) {
 	# Gather next block of data to verify.
 	my $written = substr($tx, $offset, $chunk_size);
-	# Gather corresponding block as read from DPRX.
+	# Gather corresponding block as read from EP BootBlock.
 	my $read = substr($rx, $offset, $chunk_size);
 
 	# Check they match.
@@ -517,6 +517,67 @@ sub EP_BB_read($$$) {
 }
 
 
+# Verify a program.
+# Parameters:
+#   Base address (for mismatch reporting only.)
+#   Data String to verify against (golden).
+#   Data String to verify (typically read back).
+# Returns:
+#   1 - Successful verify
+#   0 - At least one mismatch.
+sub __verify($$$) {
+    my $self = shift;
+    my $address = shift // 0x0000;
+    my $golden_data = shift;
+    my $read_data = shift;
+
+    my $block_size = 16; # For printing of mismatch.
+
+    warn "Data lengths don't match at verify.\n"
+	."\tGolden:  ".length($golden_data)." bytes"
+	."\tUnknown: ".length($read_data)." bytes"
+	unless (length($golden_data) == length($read_data));
+
+    my $good_count = 0;
+    my $bad_count = 0;
+
+    # Read and verify data one printable block at a time.
+    my $offset = 0;
+    while( $offset < length($golden_data) ) {
+	# Gather next block of data to verify.
+	my $golden_block = substr($golden_data, $offset, $block_size);
+	# Gather corresponding block as read from DPRX.
+	my $read_block = substr($read_data, $offset, $block_size);
+
+	# Check they match.
+	if ($read_block eq $golden_block) {
+	    $good_count++;
+	} else {
+	    $bad_count++;
+	    printf( "Mismatch at 0x%08x:\n", ($address+$offset) );
+	    print "Written: ";
+	    foreach my $ch (split(//, $golden_block)) {
+		printf( "%02x ", ord($ch) );
+	    }
+	    print "\n";
+	    print "Read   : ";
+	    foreach my $ch (split(//, $read_block)) {
+		printf( "%02x ", ord($ch) );
+	    }
+	    print "\n";
+	}
+
+	$offset += $block_size;
+    }
+
+    print "Verified $block_size byte blocks:\n"
+	."\tGood blocks: $good_count; Bad blocks: $bad_count.\n";
+
+    return 0 if($bad_count);
+    return 1;
+}
+
+
 # Write DP RX program.
 # Parameters: StartAddress, Data to Write.
 sub DPRX_program($$$) {
@@ -552,7 +613,7 @@ sub DPRX_read($$$) {
     # 0x0000 here goes in 0x1000 on device address space.
 
     croak "Read out of bounds for EP9169S."
-	if( ($address + $length) > 0x10000);
+	if( ($address + $length) > 0xF000);
 
 
     $self->EP_BB_program_enable_DPRX();
@@ -575,47 +636,75 @@ sub DPRX_verify($$$) {
     my $address = shift;
     my $golden_data = shift;
 
-    my $block_size = 16;
-
     # Read from DP RX same length of data as golden.
     my $read_data = $self->DPRX_read($address, length($golden_data));
 
-    my $good_count = 0;
-    my $bad_count = 0;
+    return $self->__verify($address, $golden_data, $read_data);
+}
 
-    # Read and verify data one printable block at a time.
-    my $offset = 0;
-    while( $offset < length($golden_data) ) {
-	# Gather next block of data to verify.
-	my $golden_block = substr($golden_data, $offset, $block_size);
-	# Gather corresponding block as read from DPRX.
-	my $read_block = substr($read_data, $offset, $block_size);
 
-	# Check they match.
-	if ($read_block eq $golden_block) {
-	    $good_count++;
-	} else {
-	    $bad_count++;
-	    printf( "Mismatch at 0x%08x:\n", ($address+$offset) );
-	    print "Written: ";
-	    foreach my $ch (split(//, $golden_block)) {
-		printf( "%02x ", ord($ch) );
-	    }
-	    print "\n";
-	    print "Read   : ";
-	    foreach my $ch (split(//, $read_block)) {
-		printf( "%02x ", ord($ch) );
-	    }
-	    print "\n";
-	}
+# Write HDMI Splitter program.
+# Parameters: StartAddress, Data to Write.
+sub Splitter_program($$$) {
+    my $self = shift;
+    my $address = shift // 0x0000;
+    my $data_string = shift;
+    my $max_datasize = ((0x8000*4)-0x1000);
 
-	$offset += $block_size;
-    }
+    # $address: Address in User flash area; Starts after BB.
+    # 0x0000 here goes in 0x1000 on device address space.
 
-    print "Verified: $good_count good blocks; $bad_count bad blocks.\n";
+    croak "Data too long for EP9162S."
+	if (length($data_string) > $max_datasize);
 
-    return 0 if($bad_count);
-    return 1;
+    $self->EP_BB_program_enable_Splitter();
+    $self->EP_BB_program($address, $data_string);
+    $self->EP_BB_program_disable();
+
+    return;
+}
+
+
+# Read HDMI Splitter program.
+# Parameters: StartAddress, Length to read.
+# Returns: Read data.
+sub Splitter_read($$$) {
+    my $self = shift;
+    my $address = shift // 0x0000;  # Address in User flash area; Starts after BB.
+    my $length = shift // ((0x8000*4)-0x1000);
+    my $data_string = "";
+
+    # Address in User flash area; Starts after BB.
+    # 0x0000 here goes in 0x1000 on device address space.
+
+    croak "Read out of bounds for EP9162S."
+	if( ($address + $length) > ((0x8000*4)-0x1000));
+
+
+    $self->EP_BB_program_enable_Splitter();
+    $data_string = $self->EP_BB_read($address, $length);
+    $self->EP_BB_program_disable();
+
+    return $data_string;
+}
+
+
+# Verify HDMI Splitter program.
+# Parameters:
+#   Address to start Verify
+#   Data String to verify against.
+# Returns:
+#   1 - Successful verify
+#   0 - At least one mismatch.
+sub Splitter_verify($$$) {
+    my $self = shift;
+    my $address = shift;
+    my $golden_data = shift;
+
+    # Read from HDMI Splitter same length of data as golden.
+    my $read_data = $self->Splitter_read($address, length($golden_data));
+
+    return $self->__verify($address, $golden_data, $read_data);
 }
 
 
