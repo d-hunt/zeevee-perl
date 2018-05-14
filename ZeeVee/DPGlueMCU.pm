@@ -280,6 +280,27 @@ sub EP_BB_program_enable_DPRX($) {
 }
 
 
+# DP TX Enter Programming mode.
+sub EP_BB_program_enable_DPTX($) {
+    my $self = shift;
+
+    # Go into program mode and verify.
+    $self->UART->transmit( "ExploreBBprogramDpTxP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( $rx ne "BB Program DPTX.\n" );
+
+    warn "Received: $rx.";
+
+    return;
+}
+
+
 # HDMI Splitter Enter Programming mode.
 sub EP_BB_program_enable_Splitter($) {
     my $self = shift;
@@ -638,6 +659,71 @@ sub DPRX_verify($$$) {
 
     # Read from DP RX same length of data as golden.
     my $read_data = $self->DPRX_read($address, length($golden_data));
+
+    return $self->__verify($address, $golden_data, $read_data);
+}
+
+
+# Write DP TX program.
+# Parameters: StartAddress, Data to Write.
+sub DPTX_program($$$) {
+    my $self = shift;
+    my $address = shift // 0x0000;
+    my $data_string = shift;
+    my $max_datasize = (0x7800-0x1000);
+
+    # $address: Address in User flash area; Starts after BB.
+    # 0x0000 here goes in 0x1000 on device address space.
+
+    croak "Data too long for EP196E."
+	if (length($data_string) > $max_datasize);
+
+    $self->EP_BB_program_enable_DPTX();
+    $self->EP_BB_program($address, $data_string);
+    $self->EP_BB_program_disable();
+
+    return;
+}
+
+
+# Read DP TX program.
+# Parameters: StartAddress, Length to read.
+# Returns: Read data.
+sub DPTX_read($$$) {
+    my $self = shift;
+    my $address = shift // 0x0000;  # Address in User flash area; Starts after BB.
+    my $length = shift // 0x7000;
+    my $data_string = "";
+
+    # Address in User flash area; Starts after BB.
+    # 0x0000 here goes in 0x1000 on device address space.
+
+    croak "Read out of bounds for EP196E."
+	if( ($address + $length) > 0x7000);
+
+
+    $self->EP_BB_program_enable_DPTX();
+    $data_string = $self->EP_BB_read($address, $length);
+    $self->EP_BB_program_disable();
+
+    return $data_string;
+}
+
+
+# Verify DP TX program.
+# Parameters:
+#   Address to start Verify
+#   Data String to verify against.
+# Returns:
+#   1 - Successful verify
+#   0 - At least one mismatch.
+sub DPTX_verify($$$) {
+    my $self = shift;
+    my $address = shift;
+    my $golden_data = shift;
+
+    # Read from DP TX same length of data as golden.
+    my $read_data = $self->DPTX_read($address, length($golden_data));
 
     return $self->__verify($address, $golden_data, $read_data);
 }
