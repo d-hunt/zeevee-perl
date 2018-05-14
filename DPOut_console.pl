@@ -16,7 +16,7 @@ use IO::Select;
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
 # my $host = '169.254.45.84';
-my $host = '172.16.1.52';
+my $host = '172.16.1.84';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -65,12 +65,19 @@ my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
 # Preparing for non-blocking reads from STDIN.
 my $io_select = IO::Select->new();
 $io_select->add(\*STDIN);
+$| = 1; # Autoflush
 
+warn "This program sends one line at a time, with no line feed.\n";
 while (1) {
     my $rx = $glue->flush_rx();
     print "$rx"
 	if(length($rx) > 0);
-    sleep 0.1;
+    if($io_select->can_read(0.100)){
+	my $userinput = <STDIN>;
+	chomp $userinput;
+	$uart->transmit($userinput)
+	    if(length($userinput) > 0);
+    }
 }
 
 exit 0;
