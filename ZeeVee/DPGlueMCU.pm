@@ -343,6 +343,63 @@ sub EP_BB_program_disable($) {
 }
 
 
+# Explore BootBlock get BB version.
+sub EP_BB_version($) {
+    my $self = shift;
+
+    $self->UART->transmit( "ExploreBBVersionP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( substr($rx,-1,1) ne "\n" );
+
+    chomp $rx;
+    return $rx;
+}
+
+
+# Explore BootBlock get FW checksum as written in CodeInfo block.
+sub EP_BB_FW_checksum($) {
+    my $self = shift;
+
+    $self->UART->transmit( "ExploreBBFWChecksumP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( substr($rx,-1,1) ne "\n" );
+
+    chomp $rx;
+    return $rx;
+}
+
+
+# Explore BootBlock get FW version (user code).
+sub EP_BB_FW_version($) {
+    my $self = shift;
+
+    $self->UART->transmit( "ExploreBBFWVersionP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( substr($rx,-1,1) ne "\n" );
+
+    chomp $rx;
+    return $rx;
+}
+
+
 # Write Explore BootBlock program a block of firmware code.
 # Parameters: BlockAddress, Block to Write.
 sub EP_BB_program_block($$$) {
@@ -614,6 +671,10 @@ sub DPRX_program($$$) {
 	if (length($data_string) > $max_datasize);
 
     $self->EP_BB_program_enable_DPRX();
+    print "\tBB version: ".$self->EP_BB_version();
+    print "\tFW version: ".$self->EP_BB_FW_version();
+    print "\tFW checksum: ".$self->EP_BB_FW_checksum();
+    print "\n";
     $self->EP_BB_program($address, $data_string);
     $self->EP_BB_program_disable();
 
@@ -638,6 +699,10 @@ sub DPRX_read($$$) {
 
 
     $self->EP_BB_program_enable_DPRX();
+    print "\tBB version: ".$self->EP_BB_version();
+    print "\tFW version: ".$self->EP_BB_FW_version();
+    print "\tFW checksum: ".$self->EP_BB_FW_checksum();
+    print "\n";
     $data_string = $self->EP_BB_read($address, $length);
     $self->EP_BB_program_disable();
 
@@ -679,6 +744,10 @@ sub DPTX_program($$$) {
 	if (length($data_string) > $max_datasize);
 
     $self->EP_BB_program_enable_DPTX();
+    print "\tBB version: ".$self->EP_BB_version();
+    print "\tFW version: ".$self->EP_BB_FW_version();
+    print "\tFW checksum: ".$self->EP_BB_FW_checksum();
+    print "\n";
     $self->EP_BB_program($address, $data_string);
     $self->EP_BB_program_disable();
 
@@ -703,6 +772,10 @@ sub DPTX_read($$$) {
 
 
     $self->EP_BB_program_enable_DPTX();
+    print "\tBB version: ".$self->EP_BB_version();
+    print "\tFW version: ".$self->EP_BB_FW_version();
+    print "\tFW checksum: ".$self->EP_BB_FW_checksum();
+    print "\n";
     $data_string = $self->EP_BB_read($address, $length);
     $self->EP_BB_program_disable();
 
@@ -744,6 +817,10 @@ sub Splitter_program($$$) {
 	if (length($data_string) > $max_datasize);
 
     $self->EP_BB_program_enable_Splitter();
+    print "\tBB version: ".$self->EP_BB_version();
+    print "\tFW version: ".$self->EP_BB_FW_version();
+    print "\tFW checksum: ".$self->EP_BB_FW_checksum();
+    print "\n";
     $self->EP_BB_program($address, $data_string);
     $self->EP_BB_program_disable();
 
@@ -768,6 +845,10 @@ sub Splitter_read($$$) {
 
 
     $self->EP_BB_program_enable_Splitter();
+    print "\tBB version: ".$self->EP_BB_version();
+    print "\tFW version: ".$self->EP_BB_FW_version();
+    print "\tFW checksum: ".$self->EP_BB_FW_checksum();
+    print "\n";
     $data_string = $self->EP_BB_read($address, $length);
     $self->EP_BB_program_disable();
 
