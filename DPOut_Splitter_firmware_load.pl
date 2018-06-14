@@ -15,7 +15,7 @@ use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.52';
+my $host = '172.16.1.84';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -86,7 +86,7 @@ close FILE;
 print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
 
 print "Updating EP9162S MCU.\n";
-#$glue->Splitter_program($flash_base, $data_string);
+$glue->Splitter_program($flash_base, $data_string);
 print "Verifying EP9162S MCU.\n";
 $glue->Splitter_verify($flash_base, $data_string)
     or die "Read/Verify failed!";

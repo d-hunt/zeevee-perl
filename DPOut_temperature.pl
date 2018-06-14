@@ -17,7 +17,7 @@ use IO::Select;
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
 # my $host = '169.254.45.84';
-my $host = '172.16.1.52';
+my $host = '172.16.1.84';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -70,6 +70,11 @@ my $expected;
 
 print "BlueRiver Device Die Temperature: "
     .$decoder->temperature()
+    ."\n";
+
+$Data::Dumper::Sortkeys = 1;
+print "BlueRiver Device HDMI Status: "
+    .Data::Dumper->Dump([$decoder->hdmi_status()], ["HDMI_Status"])
     ."\n";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
