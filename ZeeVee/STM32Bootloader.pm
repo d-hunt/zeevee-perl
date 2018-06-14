@@ -134,6 +134,35 @@ sub connect($) {
 }
 
 
+# Bootloader Connect without SYNC (already done)
+# Accesses the bootloader for updates.
+# Returns:
+#   1 - successfully contacted bootloader.
+#   0 - did not find bootloader.
+sub connect_nosync($) {
+    my $self = shift;
+
+    # Short circuit if we're already connected.
+    return 1
+	if $self->is_connected();
+
+    # Bootloader uses even parity.  Bitrate is auto-detected.
+    # Make sure to make a copy of the UART->Configuration()!
+    $self->ConnectionState("Trying");
+    $self->OriginalUARTConfig( { %{$self->UART->Configuration()} } );
+    $self->UART->configure( { 'baud_rate'     => 115200,
+				  'data_bits' => 8,
+				  'parity'    => "EVEN",
+				  'stop_bits' => 1,
+			    } );
+    # Flush any potential garbage characters.
+    $self->UART->receive();
+
+    $self->ConnectionState("Connected");
+    return 1;
+}
+
+
 # Bootloader Disconnect
 # Revert UART settings and block from further access.
 sub disconnect($) {
