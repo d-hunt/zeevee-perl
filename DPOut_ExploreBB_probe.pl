@@ -72,21 +72,37 @@ my $expected;
 print "BlueRiver Device Die Temperature: "
     .$decoder->temperature()
     ."\n";
+print "\n";
 
 print "Probing EP9162S MCU BootBlock.\n";
 $glue->EP_BB_program_enable_Splitter();
+print "\tBB version: ".$glue->EP_BB_version();
+print "\tFW version: ".$glue->EP_BB_FW_version();
+print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
+print "\n";
 print "Returning EP9162S MCU to normal operation.\n";
 $glue->EP_BB_program_disable();
+print "\n";
 
 print "Probing EP9169S MCU BootBlock.\n";
 $glue->EP_BB_program_enable_DPRX();
+print "\tBB version: ".$glue->EP_BB_version();
+print "\tFW version: ".$glue->EP_BB_FW_version();
+print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
+print "\n";
 print "Returning EP9169S MCU to normal operation.\n";
 $glue->EP_BB_program_disable();
+print "\n";
 
 print "Probing EP169E MCU BootBlock.\n";
 $glue->EP_BB_program_enable_DPTX();
+print "\tBB version: ".$glue->EP_BB_version();
+print "\tFW version: ".$glue->EP_BB_FW_version();
+print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
+print "\n";
 print "Returning EP169E MCU to normal operation.\n";
 $glue->EP_BB_program_disable();
+print "\n";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 
