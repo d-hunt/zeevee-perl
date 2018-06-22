@@ -188,6 +188,7 @@ _define_backslash_escapes(
     ( map { 'x' . unpack('H2', chr($_)) => chr($_) } (0..255) ),
     ( map { sprintf('%03o', $_) => chr($_) } (0..255) ),
     ( 'a' => "\x07", 'b' => "\x08", 'f' => "\x0c", 'v' => "\x0b"  ),
+    ( ' ' => ' ' ),
 );
 
 sub _define_backslash_escapes {
@@ -198,8 +199,8 @@ sub _define_backslash_escapes {
 # $special_characters_escaped = backslash( $source_string );
 sub backslash ($) {
 	local $_ = ( defined $_[0] ? $_[0] : '' );
-	# Preserve only printable ASCII characters other than \, ", $, and @
-	s/([^\x20\x21\x24\x25-\x39\x41-\x5b\x5d-\x7e])/\\$Backslashed{$1}/gs;
+	# Preserve only printable ASCII characters other than (space), \, ", $, and @
+	s/([^\x21\x24\x25-\x39\x41-\x5b\x5d-\x7e])/\\$Backslashed{$1}/gs;
 	return $_;
 }
 
