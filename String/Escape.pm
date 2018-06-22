@@ -183,12 +183,11 @@ use vars qw( %Backslashed %Interpolated );
 
 # Earlier definitions are preferred to later ones, thus we output \n not \x0d
 _define_backslash_escapes(
-    ( map { $_ => $_ } ( '\\', '"', '$', '@' ) ),
+    ( map { $_ => $_ } ( '\\', '"', '$', '@', ' ' ) ),
     ( 'r' => "\r", 'n' => "\n", 't' => "\t" ),
     ( map { 'x' . unpack('H2', chr($_)) => chr($_) } (0..255) ),
     ( map { sprintf('%03o', $_) => chr($_) } (0..255) ),
     ( 'a' => "\x07", 'b' => "\x08", 'f' => "\x0c", 'v' => "\x0b"  ),
-    ( ' ' => ' ' ),
 );
 
 sub _define_backslash_escapes {
