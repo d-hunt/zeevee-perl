@@ -17,7 +17,7 @@ use IO::Select;
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
 # my $host = '169.254.45.84';
-my $host = '172.16.1.84';
+my $host = '172.16.1.93';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -118,7 +118,7 @@ $bootloader->verify($flash_base, $data_string)
 
 # Run the application.
 $bootloader->go($flash_base);
-sleep 1.0;  # Let application start.
+sleep 1.5;  # Let application start.
 $result = $glue->flush_rx();
 print "Received and discarded on UART: $result\n"
     if(length($result) > 0);
@@ -132,6 +132,8 @@ unless( $result ~~ $expected ) {
 	." - Ummm...\n"
 	.$detail_dump."...";
 }
+$result = $glue->version();
+print "Version: $result\n\n";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 

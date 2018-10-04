@@ -15,7 +15,7 @@ use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.84';
+my $host = '172.16.1.93';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;

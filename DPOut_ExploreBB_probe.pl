@@ -15,7 +15,8 @@ use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.84';
+#my $host = '169.254.45.84';
+my $host = '172.16.1.93';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -71,6 +72,11 @@ my $expected;
 
 print "BlueRiver Device Die Temperature: "
     .$decoder->temperature()
+    ."\n";
+print "\n";
+
+print "Glue MCU Version: "
+    .$glue->version()
     ."\n";
 print "\n";
 

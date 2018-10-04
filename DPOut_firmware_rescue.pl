@@ -14,10 +14,10 @@ use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
-my $id_mode = "HARDCODED"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
-my $device_id = 'd88039ead026'; # Bricked; get back...
+my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
+my $device_id = 'd880399acbf4';
 # my $host = '169.254.45.84';
-my $host = '172.16.1.84';
+my $host = '172.16.1.93';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -58,11 +58,6 @@ my $uart = new ZeeVee::Apto_UART( { Device => $decoder,
 				    Debug => $debug,
 				  } );
 
-my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
-				    Timeout => $timeout,
-				    Debug => $debug,
-				  } );
-
 # FIXME: Get smarter about this:
 my $bootloader = new ZeeVee::STM32Bootloader( { UART => $uart,
 						Timeout => $timeout,
@@ -84,12 +79,10 @@ print "BlueRiver Device Die Temperature: "
 
 # Attempt to access bootloader.
 print "UART attempt to access already-running bootloader...\n";
-$result = $glue->flush_rx();
-print "Received and discarded on UART: $result\n"
-    if(length($result) > 0);
 
 # Now bootloader is in control.
-$bootloader->connect_nosync()
+# $bootloader->connect_nosync()
+$bootloader->connect()
     or die "Bootloader start not successful.";
 print "Bootloader connected.\n";
 $bootloader->get_version();
@@ -116,7 +109,16 @@ $bootloader->verify($flash_base, $data_string)
 
 # Run the application.
 $bootloader->go($flash_base);
-sleep 1.0;  # Let application start.
+
+sleep 1.5;  # Let application start.
+
+# Set up the Glue MCU  connection:
+# We do this late so that we don't muck with (e.g. Send "P" to bootloader.)
+my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
+				    Timeout => $timeout,
+				    Debug => $debug,
+				  } );
+
 $result = $glue->flush_rx();
 print "Received and discarded on UART: $result\n"
     if(length($result) > 0);
@@ -130,6 +132,9 @@ unless( $result ~~ $expected ) {
 	." - Ummm...\n"
 	.$detail_dump."...";
 }
+$result = $glue->version();
+print "Version: $result\n\n";
+
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 

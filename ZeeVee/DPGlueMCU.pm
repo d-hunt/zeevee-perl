@@ -238,6 +238,26 @@ sub cLVDS_lanes($$) {
 }
 
 
+# Get Glue MCU version.
+# Returns: Version String
+sub version($) {
+    my $self = shift;
+
+    $self->UART->transmit( "VersionP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive byte from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( substr($rx,-1,1) ne "\n" );
+
+    chomp $rx;
+    return $rx;
+}
+
+
 # Start bootloader for flash update.
 sub start_bootloader($) {
     my $self = shift;
@@ -413,6 +433,7 @@ sub EP_BB_program_block($$$) {
     my $rx = "";
     my $start_time = time();
     do {
+	sleep 0.050;
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
@@ -436,6 +457,7 @@ sub EP_BB_program_block($$$) {
     $rx = "";
     $start_time = time();
     do {
+	sleep 0.050;
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
@@ -498,6 +520,7 @@ sub EP_BB_read_block($$) {
     my $rx = "";
     my $start_time = time();
     do {
+	sleep 0.050;
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
@@ -523,6 +546,7 @@ sub EP_BB_read_block($$) {
     $rx = "";
     $start_time = time();
     do {
+	sleep 0.050;
 	$rx .= $self->UART->receive();
 	croak "Timeout waiting to receive byte from UART."
 	    if($self->Timeout() < (time() - $start_time) );
