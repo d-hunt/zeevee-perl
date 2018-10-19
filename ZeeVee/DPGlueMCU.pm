@@ -238,6 +238,40 @@ sub cLVDS_lanes($$) {
 }
 
 
+# Get Debug Dump
+# Parameters: None.
+# Returns: Hash of Debug Dump results.
+sub debug_dump($) {
+    my $self = shift;
+    my %result = ();
+
+    $self->UART->transmit( "DebugDumpP" );
+
+    my $rx = "";
+    my $start_time = time();
+    do {
+	$rx .= $self->UART->receive();
+	croak "Timeout waiting to receive bytes from UART."
+	    if($self->Timeout() < (time() - $start_time) );
+    } while ( substr($rx,-5,5) ne "End.\n" );
+
+    my @lines = split('\n', $rx);
+    ($result{"HDMI Link Clock"}) = ($lines[0] =~ m/^HDMI Link Clock: ([0-9]+)/)
+	and shift @lines;
+    ($result{"Sink"}) = ($lines[0] =~ m/^Sink (.+)$/)
+	and shift @lines;
+    ($result{"AUX"}) = ($lines[0] =~ m/^AUX (.+)$/)
+	and shift @lines;
+    if( $lines[0] =~ m/^DP Policy Maker State:$/ ) {
+	shift @lines;
+	($result{"DP Policy Maker State 00"}) = shift @lines;
+	($result{"DP Policy Maker State 10"}) = shift @lines;
+    }
+
+    return %result;
+}
+
+
 # Get Glue MCU version.
 # Returns: Version String
 sub version($) {
