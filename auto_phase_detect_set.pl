@@ -5,6 +5,7 @@ use strict;
 
 use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
 use ZeeVee::Aptovision_API;
+use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
 use ZeeVee::SC18IM700;
 use ZeeVee::PCF8575;
@@ -13,8 +14,9 @@ use ZeeVee::SPIFlash;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 
-my $device = 'd880399acbf4';
-my $host = '169.254.45.84';
+my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
+my $device_id = 'd880399acbf4';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -30,8 +32,28 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Debug => $debug,
 				       } );
 
-my $uart = new ZeeVee::Apto_UART( { Device => $device,
-				    Apto => $apto,
+# Determine the encoder to use for this test.
+if( $id_mode eq "NEWENCODER" ) {
+    print "Waiting for a new encoder device...\n";
+    $device_id = $apto->wait_for_new_device("all_tx");
+} elsif ( $id_mode eq "SINGLEENCODER" ) {
+    print "Looking for a single encoder.\n";
+    $device_id = $apto->find_single_device("all_tx");
+} elsif ( $id_mode eq "HARDCODED" ) {
+    print "Using hard-coded device: $device_id.\n";
+} else {
+    die "Unimlemented ID mode: $id_mode.";
+}
+print "Using encoder (DUT) $device_id.\n";
+
+my $encoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
+					     Apto => $apto,
+					     Timeout => $timeout,
+					     VideoTimeout => 20,
+					     Debug => $debug,
+					   } );
+
+my $uart = new ZeeVee::Apto_UART( { Device => $encoder,
 				    Host => $host,
 				    Timeout => $timeout,
 				    Debug => $debug,
