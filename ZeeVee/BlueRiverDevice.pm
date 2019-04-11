@@ -323,6 +323,31 @@ sub hdmi_status($$) {
     return $hdmi_status;
 }
 
+# Get and return HDMI Monitor status from the first HDMI_MONITOR node found...
+# Optional argument requires the monitor connected/disconnected; loops until timeout.
+sub monitor_status($$) {
+    my $self = shift;
+    my $expect_connected = shift;
+
+    my $monitor_status = undef;
+    my $start_time = time();
+
+    do{
+	$monitor_status = undef;
+
+	my $node = $self->get_node_by_type('HDMI_MONITOR');
+	if( defined($node) ) {
+	    $monitor_status = $node->{'status'};
+	}
+	die "Timeout on waiting for desired monitor connection $expect_connected."
+	    if( $self->VideoTimeout() < (time() - $start_time) );
+	sleep 0.5;
+    } until( !defined($expect_connected)
+	     || ( $expect_connected == $monitor_status->{'connected'} ) );
+
+    return $monitor_status;
+}
+
 # Get and return Icron USB card status from the first ICRON node found...
 sub icron_status($) {
     my $self = shift;
