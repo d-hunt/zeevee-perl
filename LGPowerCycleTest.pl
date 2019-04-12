@@ -48,7 +48,7 @@ foreach my $device_name (sort keys %device_ids) {
 
 my %TVs = ();
 foreach my $device_name (sort keys %device_ids) {
-    next unless( $device_name eq "DPDecoder" );
+    next unless( $device_name eq "Decoder" );
     # FIXME: Apto_UART can't currently use the UART connector.  It'll need modification.
     my $tv = new ZeeVee::Apto_UART( { Device => $devices{$device_name},
 				      Host => $host,
@@ -68,7 +68,7 @@ my $csv = new Text::CSV({ 'binary' => 1,
 			      'eol' => "\r\n" })
     or die "Failed to create Text::CSV object because ".Text::CSV->error_diag()." ";
 my %command = ( 'ON' => "ka 00 01\r",
-		'OFF' => 'ka 00 00\r' );
+		'OFF' => "ka 00 00\r" );
 my @column_names = ( 'Epoch',
 		     'Date',
 		     'Cycle',
@@ -77,6 +77,7 @@ my @column_names = ( 'Epoch',
 		     'DeviceID',
 		     'isConnected',
 		     'Temperature',
+		     'Monitor State',
 		     'Monitor Connected',
 		     'Monitor EDID',
 		     'Source Stable',
@@ -141,8 +142,9 @@ while(1) {
 	die "Bad programmer!";
     }
 
-    foreach my $tv (sort keys %TVs) {
-	$tv->send($command{$current_state});
+    foreach my $device_name (sort keys %TVs) {
+	my $tv = $TVs{$device_name};
+	$tv->transmit($command{$current_state});
     }
     print scalar localtime ."\t";
     print "Powered $current_state\n";
@@ -166,6 +168,7 @@ while(1) {
 		     'DeviceID' => $device->DeviceID(),
 		     'isConnected' => ( $device->is_connected() ? "YES" : "NO" ),
 		     'Temperature' => $device->__temperature(),
+		     'Monitor State' => $current_state,
 		     'Monitor Connected' => JSON_bool_to_YN( $monitor_status->{'connected'} ),
 		     'Monitor EDID' => $monitor_status->{'edid'},
 		     'Source Stable' => JSON_bool_to_YN( $hdmi_status->{'source_stable'} ),
