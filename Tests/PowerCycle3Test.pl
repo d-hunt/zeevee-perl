@@ -4,29 +4,46 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
+use ZeeVee::SC18IM700;
+use ZeeVee::PCF8575;
+use ZeeVee::SPI_GPIO;
+use ZeeVee::SPIFlash;
+use ZeeVee::WebPowerSwitch;
 use Text::CSV;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep time/ );
 use IO::File;
 
 
-my $on_time = 30; # seconds.
-my $off_time = 30; # seconds.
-my $poll_wait_time = 15; # seconds.
+# 170 seconds short of thermal cycle (122mins) will get us max measurement
+#  distribution in 88 hours we have.  Divide by 4 to get 4 measuremens per
+#  cycle, at roughly 30 minute intervals.
+my $power_cycle_interval = ( 122*60 - 170 ) / 4; # seconds.
+my $power_cycle_off_time = 120; # seconds.
+my $power_cycle_on_time = $power_cycle_interval - $power_cycle_off_time; # seconds.
 
-my %device_ids = ( 'Decoder' => 'd880399b0e2e' );
-#my %device_ids = ( 'Decoder' => 'd880399b3837' );
-my $host = '172.16.53.240';
-#my $host = '172.16.1.90';
+my %device_ids = ( '1 Encoder HDSDI' => 'd88039eb2a3f',
+		   '2 Decoder Chamber' => 'd880399b0e2e',
+		   '3 Encoder Short' => 'd880399acbf4',
+		   '4 Decoder Screen' => 'd8803959aef5', );
+my $host = '169.254.102.48';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 0;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
+
+my $power_switch = new ZeeVee::WebPowerSwitch( { Host => '172.16.2.26',
+						 Port => 80,
+						 User => 'admin',
+						 Password => 'zazzle',
+						 Timeout => 10,
+						 Debug => 0,
+					       } );
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -46,40 +63,23 @@ foreach my $device_name (sort keys %device_ids) {
 				     } );
 }
 
-my %TVs = ();
-foreach my $device_name (sort keys %device_ids) {
-    next unless( $device_name eq "Decoder" );
-    # FIXME: Apto_UART can't currently use the UART connector.  It'll need modification.
-    my $tv = new ZeeVee::Apto_UART( { Device => $devices{$device_name},
-				      Host => $host,
-				      Timeout => $timeout,
-				      Debug => $debug,
-				    } );
-
-    $TVs{$device_name} = $tv;
-}
-
 my $logfile = IO::File->new();
-$logfile->open("./TVPowerCycle.log", '>>')
+$logfile->open("./powercycle.log", '>>')
     or die "Can't open logfile for writing: $! ";
 
 # Prepare for CSV output and print header.
 my $csv = new Text::CSV({ 'binary' => 1,
 			      'eol' => "\r\n" })
-    or die "Failed to create Text::CSV object because ".Text::CSV->error_diag()." ";
-my %command = ( 'ON' => "ka 00 01\r",
-		'OFF' => "ka 00 00\r" );
+    or die "Failed to create Text::CSV object because".Text::CSV->error_diag()." ";
 my @column_names = ( 'Epoch',
 		     'Date',
-		     'Cycle',
+		     'Power Cycle',
+		     'Power State',
 		     'Up Time',
 		     'Device Name',
 		     'DeviceID',
 		     'isConnected',
 		     'Temperature',
-		     'Monitor State',
-		     'Monitor Connected',
-		     'Monitor EDID',
 		     'Source Stable',
 		     'Video Width',
 		     'Video Height',
@@ -123,54 +123,61 @@ sub JSON_bool_to_YN($) {
     return $value;
 }
 
+# Power off in preperation.
+print scalar localtime ."\t";
+print "Turning off Power.\n";
+$power_switch->powerOff(1);
+$power_switch->powerOff(2);
+sleep 2;
 # Start autoflushing STDOUT
 $| = 1;
 
 my $current_cycle = 0;
-my $current_state = 'ON';
 my $global_start_time = time();
-my $change_time = undef;
+my $power_state = "OFF";
+my $power_on_time = undef;
 my $last_wake_time = int($global_start_time) + 1;
 while(1) {
-    $current_cycle++;
-
-    if($current_state eq 'ON') {
-	$current_state = 'OFF';
-    } elsif($current_state eq 'OFF') {
-	$current_state = 'ON';
-    } else {
-	die "Bad programmer!";
-    }
-
-    foreach my $device_name (sort keys %TVs) {
-	my $tv = $TVs{$device_name};
-	$tv->transmit($command{$current_state});
-    }
-    print scalar localtime ."\t";
-    print "Powered $current_state\n";
-    $change_time = time();
-    sleep $poll_wait_time;
-    
     my $current_time = time();
-    my $up_time = $current_time - $change_time;
-	    
+    my $up_time = undef;
+    $up_time = $current_time - $power_on_time
+	if( defined( $power_on_time ) );
+
+    my $modulo_cycle_time = ($current_time - $global_start_time) % $power_cycle_interval;
+    if( ($power_state eq "ON")
+	&& $modulo_cycle_time > $power_cycle_on_time ) {
+	print scalar localtime ."\t";
+	print "Turning off Power.\n";
+	$power_switch->powerOff(1);
+	$power_switch->powerOff(2);
+	$power_state = "OFF";
+	$power_on_time = undef;
+    } elsif( ($power_state eq "OFF")
+	     && $modulo_cycle_time < $power_cycle_on_time ) {
+	print scalar localtime ."\t";
+	print "Turning on Power.\n";
+	$power_switch->powerOn(1);
+	$power_switch->powerOn(2);
+	$power_switch->powerCycle(5);
+	$power_state = "ON";
+	$power_on_time = time();
+	$current_cycle++;
+    }
+
     # Check and log each device status.
     foreach my $name (sort keys %devices) {
 	my $device = $devices{$name};
 	my $hdmi_status = $device->hdmi_status();
-	my $monitor_status = $device->monitor_status();
 	# The basic data we're collecting
 	my %data = ( 'Epoch' => $current_time,
 		     'Date' => scalar localtime($current_time),
-		     'Cycle' => $current_cycle,
+		     'Power Cycle' => $current_cycle,
+		     'Power State' => $power_state,
 		     'Up Time' => $up_time,
 		     'Device Name' => $name,
 		     'DeviceID' => $device->DeviceID(),
 		     'isConnected' => ( $device->is_connected() ? "YES" : "NO" ),
 		     'Temperature' => $device->__temperature(),
-		     'Monitor State' => $current_state,
-		     'Monitor Connected' => JSON_bool_to_YN( $monitor_status->{'connected'} ),
-		     'Monitor EDID' => $monitor_status->{'edid'},
 		     'Source Stable' => JSON_bool_to_YN( $hdmi_status->{'source_stable'} ),
 		     'Video Width' => $hdmi_status->{'video'}->{'width'},
 		     'Video Height' => $hdmi_status->{'video'}->{'height'},
@@ -197,22 +204,14 @@ while(1) {
 
     $logfile->flush();
 
-    # Wait for next polling mark.
-    if($current_state eq 'ON') {
-	$last_wake_time += $on_time;
-    } elsif($current_state eq 'OFF') {
-	$last_wake_time += $off_time;
-    } else {
-	die "Bad programmer!";
-    }
-
+    # Wait for next 5s mark.
+    $last_wake_time += 5;
     $current_time = time();
     if($last_wake_time > $current_time) {
 	sleep $last_wake_time - $current_time;
     } else {
-	$last_wake_time += $on_time;
-	$last_wake_time += $off_time;
-	warn "Fell behind on polls at $current_time.  Buying extra time.";
+	$last_wake_time += 5;
+	warn "Fell behind on 5s polls at $current_time.  Buying extra time.";
     }
 }
 

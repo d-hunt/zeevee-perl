@@ -4,7 +4,7 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -15,7 +15,8 @@ use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.93';
+#my $host = '169.254.45.84';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -72,24 +73,42 @@ my $expected;
 print "BlueRiver Device Die Temperature: "
     .$decoder->temperature()
     ."\n";
+print "\n";
 
-# Open and read file.
-my $filename = "Charlie_DP_EP9169S.bin";
-my $flash_base = 0x0;
-my $max_filesize = (0xF800-0x1000);
-my $data_string = "";
-open( FILE, "<:raw", $filename )
-    or die "Can't open file $filename.";
-read( FILE, $data_string, $max_filesize )
-    or die "Error reading from file $filename.";
-close FILE;
-print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
+print "Glue MCU Version: "
+    .$glue->version()
+    ."\n";
+print "\n";
 
-print "Updating EP9169S MCU.\n";
-$glue->DPRX_program($flash_base, $data_string);
-print "Verifying EP9169S MCU.\n";
-$glue->DPRX_verify($flash_base, $data_string)
-    or die "Read/Verify failed!";
+print "Probing EP9162S MCU BootBlock.\n";
+$glue->EP_BB_program_enable_Splitter();
+print "\tBB version: ".$glue->EP_BB_version();
+print "\tFW version: ".$glue->EP_BB_FW_version();
+print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
+print "\n";
+print "Returning EP9162S MCU to normal operation.\n";
+$glue->EP_BB_program_disable();
+print "\n";
+
+print "Probing EP9169S MCU BootBlock.\n";
+$glue->EP_BB_program_enable_DPRX();
+print "\tBB version: ".$glue->EP_BB_version();
+print "\tFW version: ".$glue->EP_BB_FW_version();
+print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
+print "\n";
+print "Returning EP9169S MCU to normal operation.\n";
+$glue->EP_BB_program_disable();
+print "\n";
+
+print "Probing EP169E MCU BootBlock.\n";
+$glue->EP_BB_program_enable_DPTX();
+print "\tBB version: ".$glue->EP_BB_version();
+print "\tFW version: ".$glue->EP_BB_FW_version();
+print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
+print "\n";
+print "Returning EP169E MCU to normal operation.\n";
+$glue->EP_BB_program_disable();
+print "\n";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 

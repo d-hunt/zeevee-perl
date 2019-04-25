@@ -4,7 +4,7 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -16,7 +16,7 @@ use IO::Select;
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
 #my $host = '169.254.45.84';
-my $host = '172.16.1.93';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -58,58 +58,26 @@ my $uart = new ZeeVee::Apto_UART( { Device => $decoder,
 				  } );
 
 my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
-				    Timeout => 30, #$timeout,
+				    Timeout => $timeout,
 				    Debug => $debug,
 				  } );
 
 # Preparing for non-blocking reads from STDIN.
 my $io_select = IO::Select->new();
 $io_select->add(\*STDIN);
+$| = 1; # Autoflush
 
-#Temporary result values.
-my $result;
-my $expected;
-
-print "BlueRiver Device Die Temperature: "
-    .$decoder->temperature()
-    ."\n";
-print "\n";
-
-print "Glue MCU Version: "
-    .$glue->version()
-    ."\n";
-print "\n";
-
-print "Probing EP9162S MCU BootBlock.\n";
-$glue->EP_BB_program_enable_Splitter();
-print "\tBB version: ".$glue->EP_BB_version();
-print "\tFW version: ".$glue->EP_BB_FW_version();
-print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
-print "\n";
-print "Returning EP9162S MCU to normal operation.\n";
-$glue->EP_BB_program_disable();
-print "\n";
-
-print "Probing EP9169S MCU BootBlock.\n";
-$glue->EP_BB_program_enable_DPRX();
-print "\tBB version: ".$glue->EP_BB_version();
-print "\tFW version: ".$glue->EP_BB_FW_version();
-print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
-print "\n";
-print "Returning EP9169S MCU to normal operation.\n";
-$glue->EP_BB_program_disable();
-print "\n";
-
-print "Probing EP169E MCU BootBlock.\n";
-$glue->EP_BB_program_enable_DPTX();
-print "\tBB version: ".$glue->EP_BB_version();
-print "\tFW version: ".$glue->EP_BB_FW_version();
-print "\tFW checksum: ".$glue->EP_BB_FW_checksum();
-print "\n";
-print "Returning EP169E MCU to normal operation.\n";
-$glue->EP_BB_program_disable();
-print "\n";
-
-print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
+warn "This program sends one line at a time, with no line feed.\n";
+while (1) {
+    my $rx = $glue->flush_rx();
+    print "$rx"
+	if(length($rx) > 0);
+    if($io_select->can_read(0.100)){
+	my $userinput = <STDIN>;
+	chomp $userinput;
+	$uart->transmit($userinput)
+	    if(length($userinput) > 0);
+    }
+}
 
 exit 0;

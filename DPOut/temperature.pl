@@ -4,19 +4,19 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
 use ZeeVee::DPGlueMCU;
+use ZeeVee::STM32Bootloader;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-#my $host = '169.254.45.84';
-my $host = '172.16.1.93';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -29,6 +29,18 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 JSON_Template => $json_template,
 					 Debug => $debug,
 				       } );
+
+# We must have a single encoder on the test network.
+print "Looking for a single encoder.\n";
+my $tx_device_id = $apto->find_single_device("all_tx");
+print "Using encoder $tx_device_id.\n";
+
+my $encoder = new ZeeVee::BlueRiverDevice( { DeviceID => $tx_device_id,
+					     Apto => $apto,
+					     Timeout => $timeout,
+					     VideoTimeout => 20,
+					     Debug => $debug,
+					   } );
 
 # Determine the decoder to use for this test.
 if( $id_mode eq "NEWDEVICE" ) {
@@ -51,33 +63,19 @@ my $decoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
 					     Debug => $debug,
 					   } );
 
-my $uart = new ZeeVee::Apto_UART( { Device => $decoder,
-				    Host => $host,
-				    Timeout => $timeout,
-				    Debug => $debug,
-				  } );
+#Temporary result values.
+my $result;
+my $expected;
 
-my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
-				    Timeout => $timeout,
-				    Debug => $debug,
-				  } );
+print "BlueRiver Device Die Temperature: "
+    .$decoder->temperature()
+    ."\n";
 
-# Preparing for non-blocking reads from STDIN.
-my $io_select = IO::Select->new();
-$io_select->add(\*STDIN);
-$| = 1; # Autoflush
+$Data::Dumper::Sortkeys = 1;
+print "BlueRiver Device HDMI Status: "
+    .Data::Dumper->Dump([$decoder->hdmi_status()], ["HDMI_Status"])
+    ."\n";
 
-warn "This program sends one line at a time, with no line feed.\n";
-while (1) {
-    my $rx = $glue->flush_rx();
-    print "$rx"
-	if(length($rx) > 0);
-    if($io_select->can_read(0.100)){
-	my $userinput = <STDIN>;
-	chomp $userinput;
-	$uart->transmit($userinput)
-	    if(length($userinput) > 0);
-    }
-}
+print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 
 exit 0;

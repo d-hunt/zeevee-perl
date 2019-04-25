@@ -4,47 +4,28 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
-use ZeeVee::WebPowerSwitch;
+use ZeeVee::DPGlueMCU;
 use Text::CSV;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep time/ );
 use IO::File;
 
 
-# 170 seconds short of thermal cycle (122mins) will get us max measurement
-#  distribution in 88 hours we have.  Divide by 4 to get 4 measuremens per
-#  cycle, at roughly 30 minute intervals.
-my $power_cycle_interval = ( 122*60 - 170 ) / 4; # seconds.
-my $power_cycle_off_time = 120; # seconds.
-my $power_cycle_on_time = $power_cycle_interval - $power_cycle_off_time; # seconds.
+my $dwell_time = 30; # seconds.
+my $poll_time = 10;   # seconds.
 
-my %device_ids = ( 'TopBackLeft' => 'd88039eb068a',
-		   'TopBackRight' => 'd88039eb3ecb',
-		   'TopFrontLeft' => 'd88039eb5b07',
-		   'TopFrontRight' => 'd88039ead026',
-		   'Input' => 'd880399ab2ab',
-		   'RX1 (TBL HDMI)' => 'd880399aef39',
-		   'RX2 (TBR HDMI)' => 'd880399a9eb0',
-		   'RX3 (TFL HDMI)' => 'd880395a8dca',
-		   'RX4 (TFR HDMI)' => 'd880395909e9', );
-my $host = '169.254.102.48';
+my %device_ids = ( 'DPDecoder' => 'd88039ead017',
+		   'DPEncoder' => 'd8803959aceb');
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 0;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
-
-my $power_switch = new ZeeVee::WebPowerSwitch( { Host => '10.10.10.3',
-						 Port => 80,
-						 User => 'admin',
-						 Password => 'zazzle',
-						 Timeout => 10,
-						 Debug => 0,
-					       } );
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -64,22 +45,79 @@ foreach my $device_name (sort keys %device_ids) {
 				     } );
 }
 
+my %glueMCUs = ();
+foreach my $device_name (sort keys %device_ids) {
+    next unless( $device_name eq "DPDecoder" );
+    my $uart = new ZeeVee::Apto_UART( { Device => $devices{$device_name},
+					Host => $host,
+					Timeout => $timeout,
+					Debug => $debug,
+				      } );
+
+    my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
+					Timeout => $timeout,
+					Debug => $debug,
+				      } );
+    $glueMCUs{$device_name} = $glue;
+}
+
+
 my $logfile = IO::File->new();
-$logfile->open("./powercycle.log", '>>')
+$logfile->open("./resolutionchange.log", '>>')
     or die "Can't open logfile for writing: $! ";
 
 # Prepare for CSV output and print header.
 my $csv = new Text::CSV({ 'binary' => 1,
 			      'eol' => "\r\n" })
-    or die "Failed to create Text::CSV object because".Text::CSV->error_diag()." ";
+    or die "Failed to create Text::CSV object because ".Text::CSV->error_diag()." ";
+my @resolutions = ( 'genlock',
+		    'fastswitch size 4096 2160 fps 60',
+		    'fastswitch size 4096 2160 fps 50',
+		    'fastswitch size 4096 2160 fps 30',
+		    'fastswitch size 4096 2160 fps 25',
+		    'fastswitch size 4096 2160 fps 24',
+		    'fastswitch size 3840 2160 fps 60',
+		    'fastswitch size 3840 2160 fps 50',
+		    'fastswitch size 3840 2160 fps 30',
+		    'fastswitch size 3840 2160 fps 25',
+		    'fastswitch size 3840 2160 fps 24',
+		    'fastswitch size 1920 1080 fps 60',
+		    'fastswitch size 1920 1080 fps 50',
+		    'fastswitch size 1920 1080 fps 30',
+		    'fastswitch size 1920 1080 fps 25',
+		    'fastswitch size 1920 1080 fps 24',
+		    'fastswitch size 1280 720 fps 60',
+		    'fastswitch size 1280 720 fps 50',
+		    'fastswitch size 1280 720 fps 30',
+		    'fastswitch size 1280 720 fps 25',
+		    'fastswitch size 1280 720 fps 24',
+		    'fastswitch size 720 480 fps 60',
+		    'fastswitch size 720 480 fps 50',
+		    'fastswitch size 720 480 fps 30',
+		    'fastswitch size 720 480 fps 25',
+		    'fastswitch size 720 480 fps 24',
+		    'fastswitch size 2560 1440 fps 60',
+		    'fastswitch size 1920 1200 fps 60',
+		    'fastswitch size 1600 1200 fps 60',
+		    'fastswitch size 1680 1050 fps 60',
+		    'fastswitch size 1280 1024 fps 60',
+		    'fastswitch size 800 600 fps 60',
+		    'fastswitch size 640 480 fps 60',
+		    'fastswitch size 1920 1080 fps 120', );
 my @column_names = ( 'Epoch',
 		     'Date',
-		     'Power Cycle',
-		     'Power State',
+		     'Cycle',
 		     'Up Time',
 		     'Device Name',
 		     'DeviceID',
 		     'isConnected',
+		     'Current Resolution',
+		     'Last Resolution',
+		     'HDMI Link Clock',
+		     'Sink Detected',
+		     'AUX Available',
+		     'DPTXPM State 00',
+		     'DPTXPM State 10',
 		     'Temperature',
 		     'Source Stable',
 		     'Video Width',
@@ -124,51 +162,50 @@ sub JSON_bool_to_YN($) {
     return $value;
 }
 
-# Power off in preperation.
-print scalar localtime ."\t";
-print "Turning off Power.\n";
-$power_switch->powerOff(1);
-$power_switch->powerOff(2);
-$power_switch->powerOff(3);
-$power_switch->powerOff(4);
-sleep 2;
+# Start the stream
+$devices{"DPEncoder"}->start("HDMI");
+# Little low-level, but gets the correct input selected. (add-in card.)
+$devices{"DPEncoder"}->set_property("nodes[HDMI_DECODER:0].inputs[main:0].configuration.source.value", "1");
+
 # Start autoflushing STDOUT
 $| = 1;
 
+# Set up resolution lists; track next resolutions; Set up decoder to first resolution.
+my %next_resolution_index = ();
+foreach my $resolution (@resolutions) {
+    $next_resolution_index{$resolution} = 0;
+}
+my $current_resolution = $resolutions[0];
+my $last_resolution = "Nothing";
+print "Changing Resolution.\t$last_resolution\t->\t$current_resolution\n";
+$devices{"DPDecoder"}->join($devices{"DPEncoder"}->DeviceID.":HDMI:0",
+			    "0",
+			    $current_resolution );
+sleep 2;
+
 my $current_cycle = 0;
 my $global_start_time = time();
-my $power_state = "OFF";
-my $power_on_time = undef;
+my $change_time = undef;
 my $last_wake_time = int($global_start_time) + 1;
 while(1) {
     my $current_time = time();
     my $up_time = undef;
-    $up_time = $current_time - $power_on_time
-	if( defined( $power_on_time ) );
+    $up_time = $current_time - $change_time
+	if( defined( $change_time ) );
 
-    my $modulo_cycle_time = ($current_time - $global_start_time) % $power_cycle_interval;
-    if( ($power_state eq "ON")
-	&& $modulo_cycle_time > $power_cycle_on_time ) {
+    if( !defined($up_time) || $up_time > $dwell_time ) {
 	print scalar localtime ."\t";
-	print "Turning off Power.\n";
-	$power_switch->powerOff(1);
-	$power_switch->powerOff(2);
-	$power_switch->powerOff(3);
-	$power_switch->powerOff(4);
-	$power_state = "OFF";
-	$power_on_time = undef;
-    } elsif( ($power_state eq "OFF")
-	     && $modulo_cycle_time < $power_cycle_on_time ) {
-	print scalar localtime ."\t";
-	print "Turning on Power.\n";
-	$power_switch->powerOn(1);
-	$power_switch->powerOn(2);
-	$power_switch->powerOn(3);
-	$power_switch->powerOn(4);
-	#$power_switch->powerCycle(5);
-	$power_state = "ON";
-	$power_on_time = time();
+	$change_time = time();
 	$current_cycle++;
+	$next_resolution_index{$current_resolution}++;
+	$next_resolution_index{$current_resolution} %= scalar(@resolutions);
+	$last_resolution = $current_resolution;
+	$current_resolution = $resolutions[$next_resolution_index{$current_resolution}];
+	print "Changing Resolution.\t$last_resolution\t->\t$current_resolution\n";
+	$devices{"DPDecoder"}->join($devices{"DPEncoder"}->DeviceID.":HDMI:0",
+				    "0",
+				    $current_resolution );
+	sleep 2;
     }
 
     # Check and log each device status.
@@ -178,12 +215,13 @@ while(1) {
 	# The basic data we're collecting
 	my %data = ( 'Epoch' => $current_time,
 		     'Date' => scalar localtime($current_time),
-		     'Power Cycle' => $current_cycle,
-		     'Power State' => $power_state,
+		     'Cycle' => $current_cycle,
 		     'Up Time' => $up_time,
 		     'Device Name' => $name,
 		     'DeviceID' => $device->DeviceID(),
 		     'isConnected' => ( $device->is_connected() ? "YES" : "NO" ),
+		     'Current Resolution' => $current_resolution,
+		     'Last Resolution' => $last_resolution,
 		     'Temperature' => $device->__temperature(),
 		     'Source Stable' => JSON_bool_to_YN( $hdmi_status->{'source_stable'} ),
 		     'Video Width' => $hdmi_status->{'video'}->{'width'},
@@ -205,20 +243,29 @@ while(1) {
 	    $data{"VD $key"} = $value;
 	}
 
+	if( exists( $glueMCUs{$name} ) ) {
+	    my %debug_dump = $glueMCUs{$name}->debug_dump();
+	    $data{'HDMI Link Clock'} = $debug_dump{"HDMI Link Clock"};
+	    $data{'Sink Detected'} = $debug_dump{"Sink"};
+	    $data{'AUX Available'} = $debug_dump{"AUX"};
+	    $data{'DPTXPM State 00'} = $debug_dump{"DP Policy Maker State 00"};
+	    $data{'DPTXPM State 10'} = $debug_dump{"DP Policy Maker State 10"};
+    	}
+
 	$csv->print_hr( $logfile,
 			\%data );
     }
 
     $logfile->flush();
 
-    # Wait for next 10s mark.
-    $last_wake_time += 10;
+    # Wait for next polling mark.
+    $last_wake_time += $poll_time;
     $current_time = time();
     if($last_wake_time > $current_time) {
 	sleep $last_wake_time - $current_time;
     } else {
-	$last_wake_time += 10;
-	warn "Fell behind on 10s polls at $current_time.  Buying extra time.";
+	$last_wake_time += $poll_time;
+	warn "Fell behind on ${poll_time}s polls at $current_time.  Buying extra time.";
     }
 }
 

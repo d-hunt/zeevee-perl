@@ -3,7 +3,7 @@
 use warnings;
 use strict;
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -22,6 +22,8 @@ my $timeout = 10;
 my $debug = 1;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
+
+my $desired_input = $ARGV[0] // '';
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -108,6 +110,11 @@ my $gpio;
 # First get current states.
 $gpio = $bridge->gpio();
 print "Initial Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+$gpio = $sii_gpio->read();
+print "Initial SiI GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+$gpio = $cya_gpio->read();
+print "Initial CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+
 
 # Set to 115200 bps.
 ####### FIXME: Skipping for now because it's a pain
@@ -115,24 +122,19 @@ print "Initial Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 # $bridge->change_baud_rate(115200);
 
 # Get starting point.
-$gpio = $bridge->gpio();
+$gpio = $cya_gpio->read();
 
-# Configure GPIO in/out/OD/weak
-$bridge->registerset([0x02, 0x03], [0xd5, 0x97]);
+if( $desired_input eq "Analog" ) {
+    print "\nSetting Analog Audio.\n\n";
+    $gpio->[8] = 1;
+} elsif ( $desired_input eq "SPDIF" ) {
+    print "\nSetting SPDIF Audio.\n\n";
+    $gpio->[8] = 0;
+} else {
+    die "Unknown input '$desired_input'.";
+}
 
-# Pulse reset and LED.
-print "\nAsserting Reset; LED off.\n\n";
-$gpio->[4] = 0; # MSTR_RST_L
-$gpio->[3] = 1; # STATUS_LED_L
-$gpio = $bridge->gpio($gpio);
-
-sleep 1;
-
-print "\nDeasserting Reset; LED on.\n\n";
-$gpio->[4] = 1; # MSTR_RST_L
-$gpio->[3] = 0; # STATUS_LED_L
-$gpio = $bridge->gpio($gpio);
-
-print "Ending Bridge GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+$gpio = $cya_gpio->write($gpio);
+print "Ending CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
 exit 0;
