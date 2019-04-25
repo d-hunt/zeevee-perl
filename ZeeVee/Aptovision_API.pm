@@ -305,6 +305,23 @@ sub device_list($$) {
 }
 
 
+# Get devices from server.
+# Only gets devices currently up.
+# Returns a hashref for DeviceID => details.
+sub device_list_connected($$) {
+    my $self = shift;
+    my $group = shift // "all";
+
+    my %devices = %{$self->device_list($group)};
+    foreach my $id (sort keys %devices) {
+	delete $devices{$id}
+	unless( $devices{$id}->{"__status__"} eq "UP" );
+    }
+
+    return \%devices;
+}
+
+
 # Wait for a new device.
 # Returns deviceID.
 sub wait_for_new_device($$) {
@@ -312,23 +329,14 @@ sub wait_for_new_device($$) {
     my $group = shift;
     my $new_device_id = undef;
 
-    my $old_device_list = $self->device_list($group);
-    foreach my $id (sort keys %{$old_device_list}) {
-	delete $old_device_list->{$id}
-	    unless( $old_device_list->{$id}->{"__status__"} eq "UP" );
-    }
+    my $old_device_list = $self->device_list_connected($group);
 
     print "Found ".scalar(keys %{$old_device_list})." devices up.\n"
 	if( $self->Debug >= 1 );
 
     until( defined($new_device_id) ) {
-	my $new_device_list = $self->device_list($group);
+	my $new_device_list = $self->device_list_connected($group);
 
-	# Delete all devices not UP.
-	foreach my $id (sort keys %{$new_device_list}) {
-	    delete $new_device_list->{$id}
-                unless( $new_device_list->{$id}->{"__status__"} eq "UP" );
-	}
 	# Delete all devices already known.
 	foreach my $id (sort keys %{$new_device_list}) {
 	    delete $new_device_list->{$id}
@@ -362,11 +370,7 @@ sub find_single_device($$) {
     my $group = shift;
     my $new_device_id = undef;
 
-    my $device_list = $self->device_list($group);
-    foreach my $id (sort keys %{$device_list}) {
-	delete $device_list->{$id}
-	    unless( $device_list->{$id}->{"__status__"} eq "UP" );
-    }
+    my $device_list = $self->device_list_connected($group);
 
     my $device_count = scalar keys %{$device_list};
 
