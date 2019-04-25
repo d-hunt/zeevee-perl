@@ -13,7 +13,7 @@ use IO::Select;
 
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.93';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -63,7 +63,11 @@ $encoder->start("HDMI");
 $decoder->join($encoder->DeviceID.":HDMI:0",
 	       "0",
 	       "genlock" );
+#	       "fastswitch size 1920 1080 fps 120" );
 #	       "fastswitch size 2560 1440 fps 60 stretch" );
+#	       "fastswitch size 2560 1800 fps 60 total 2720 1852 pulse 32 4 front_porch 48 3" );
+#	       "fastswitch size 2560 1800 fps 60 total 3520 1865 pulse 280 4 front_porch 200 3" );
+#	       "fastswitch size 2560 1440 fps 60 total 2720 1481 pulse 32 5 front_porch 48 3 polarity positive positive" );
 #	       "fastswitch quantization AUTO size 1920 1080 fps 60 stretch" );
 # Little low-level, but gets the correct input selected. (HDMI input.)
 $encoder->set_property("nodes[HDMI_DECODER:0].inputs[main:0].configuration.source.value", "0");
