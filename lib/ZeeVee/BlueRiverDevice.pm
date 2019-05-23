@@ -234,6 +234,25 @@ sub join($$$$) {
 }
 
 
+# Send 'leave' command to stop receiving a stream at this device.
+sub leave($) {
+    my $self = shift;
+    my $type_index = shift;
+
+    # Construct command.
+    my $command = "leave ".$self->DeviceID;
+    $command .= ":".$type_index
+	if( defined($type_index) );
+
+    $self->Apto->send( $command );
+
+    # Now wait for the commands to complete, ignoring return values.
+    $self->Apto->fence_ignore();
+
+    return 1;
+}
+
+
 # Send 'switch' command to set stream destination for a source from this device.
 sub switch($$$) {
     my $self = shift;
