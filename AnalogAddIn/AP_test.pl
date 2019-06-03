@@ -4,7 +4,7 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -18,7 +18,7 @@ use IO::Select;
 
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.93';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $edid_filename = './zyper-vga-edid.bin';
 my $timeout = 10;

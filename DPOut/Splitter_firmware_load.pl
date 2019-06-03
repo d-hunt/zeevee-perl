@@ -4,7 +4,7 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -15,9 +15,9 @@ use IO::Select;
 
 my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.93';
+my $host = '172.16.1.90';
 my $port = 6970;
-my $timeout = 60;
+my $timeout = 10;
 my $debug = 1;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
@@ -57,7 +57,7 @@ my $uart = new ZeeVee::Apto_UART( { Device => $decoder,
 				  } );
 
 my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
-				    Timeout => $timeout,
+				    Timeout => 30, #$timeout,
 				    Debug => $debug,
 				  } );
 
@@ -74,9 +74,9 @@ print "BlueRiver Device Die Temperature: "
     ."\n";
 
 # Open and read file.
-my $filename = "Charlie_DP_EP196E.bin";
+my $filename = "BinaryCurrent/EP9162S.bin";
 my $flash_base = 0x0;
-my $max_filesize = (0x7800-0x1000);
+my $max_filesize = ((0x8000*4)-0x1000);
 my $data_string = "";
 open( FILE, "<:raw", $filename )
     or die "Can't open file $filename.";
@@ -85,10 +85,10 @@ read( FILE, $data_string, $max_filesize )
 close FILE;
 print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
 
-print "Updating EP196E MCU.\n";
-$glue->DPTX_program($flash_base, $data_string);
-print "Verifying EP196E MCU.\n";
-$glue->DPTX_verify($flash_base, $data_string)
+print "Updating EP9162S MCU.\n";
+$glue->Splitter_program($flash_base, $data_string);
+print "Verifying EP9162S MCU.\n";
+$glue->Splitter_verify($flash_base, $data_string)
     or die "Read/Verify failed!";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";

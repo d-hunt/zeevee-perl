@@ -4,19 +4,16 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib './lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
-use ZeeVee::Apto_UART;
-use ZeeVee::DPGlueMCU;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
-my $id_mode = "SINGLEDEVICE"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
+my $id_mode = "SINGLEDECODER"; # Set to: SINGLEDECODER, NEWDECODER, HARDCODED
 my $device_id = 'd880399acbf4';
-#my $host = '169.254.45.84';
-my $host = '172.16.1.93';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -31,10 +28,10 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 				       } );
 
 # Determine the decoder to use for this test.
-if( $id_mode eq "NEWDEVICE" ) {
+if( $id_mode eq "NEWDECODER" ) {
     print "Waiting for a new decoder device...\n";
     $device_id = $apto->wait_for_new_device("all_rx");
-} elsif ( $id_mode eq "SINGLEDEVICE" ) {
+} elsif ( $id_mode eq "SINGLEDECODER" ) {
     print "Looking for a single decoder.\n";
     $device_id = $apto->find_single_device("all_rx");
 } elsif ( $id_mode eq "HARDCODED" ) {
@@ -51,33 +48,12 @@ my $decoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
 					     Debug => $debug,
 					   } );
 
-my $uart = new ZeeVee::Apto_UART( { Device => $decoder,
-				    Host => $host,
-				    Timeout => $timeout,
-				    Debug => $debug,
-				  } );
+$decoder->leave();
+#$decoder->leave("HDMI");
+#$decoder->leave("HDMI_AUDIO");
+#$decoder->leave("AUDIO");
+#$decoder->leave("HDMI:0");
 
-my $glue = new ZeeVee::DPGlueMCU( { UART => $uart,
-				    Timeout => $timeout,
-				    Debug => $debug,
-				  } );
-
-# Preparing for non-blocking reads from STDIN.
-my $io_select = IO::Select->new();
-$io_select->add(\*STDIN);
-$| = 1; # Autoflush
-
-warn "This program sends one line at a time, with no line feed.\n";
-while (1) {
-    my $rx = $glue->flush_rx();
-    print "$rx"
-	if(length($rx) > 0);
-    if($io_select->can_read(0.100)){
-	my $userinput = <STDIN>;
-	chomp $userinput;
-	$uart->transmit($userinput)
-	    if(length($userinput) > 0);
-    }
-}
+print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 
 exit 0;

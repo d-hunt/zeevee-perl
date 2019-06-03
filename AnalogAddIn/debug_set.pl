@@ -3,7 +3,7 @@
 use warnings;
 use strict;
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -23,7 +23,7 @@ my $debug = 1;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
-my $desired_input = $ARGV[0] // '';
+my $desired_debug = $ARGV[0] // '';
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -121,17 +121,20 @@ print "Initial CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 #######   to keep in sync across invokations.
 # $bridge->change_baud_rate(115200);
 
-# Get starting point.
+# Read CYA GPIO so we only modify.
 $gpio = $cya_gpio->read();
 
-if( $desired_input eq "Analog" ) {
-    print "\nSetting Analog Audio.\n\n";
-    $gpio->[8] = 1;
-} elsif ( $desired_input eq "SPDIF" ) {
-    print "\nSetting SPDIF Audio.\n\n";
-    $gpio->[8] = 0;
+# change Debug state for SiIMon access.
+if( $desired_debug eq "enable" ) {
+    print "\nEnabling debug mode.\n\n";
+    $gpio->[0] = 0;
+    $cya_gpio->write([0,1,1,1,1,1,1,1,
+		      1,1,1,1,1,1,1,1]);
+} elsif ( $desired_debug eq "disable" ) {
+    print "\nDisabling debug mode.\n\n";
+    $gpio->[0] = 1;
 } else {
-    die "Unknown input '$desired_input'.";
+    die "Unknown debug mode '$desired_debug'.";
 }
 
 $gpio = $cya_gpio->write($gpio);

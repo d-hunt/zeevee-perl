@@ -4,7 +4,7 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib './lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;

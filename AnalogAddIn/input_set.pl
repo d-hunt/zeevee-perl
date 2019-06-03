@@ -3,7 +3,7 @@
 use warnings;
 use strict;
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -23,7 +23,7 @@ my $debug = 1;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
-my $desired_debug = $ARGV[0] // '';
+my $desired_input = $ARGV[0] // '';
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -121,23 +121,42 @@ print "Initial CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 #######   to keep in sync across invokations.
 # $bridge->change_baud_rate(115200);
 
-# Read CYA GPIO so we only modify.
-$gpio = $cya_gpio->read();
+# Get starting point.
+$gpio = $sii_gpio->read();
 
-# change Debug state for SiIMon access.
-if( $desired_debug eq "enable" ) {
-    print "\nEnabling debug mode.\n\n";
+# 0xffff Selects "VGA" input:
+# 0xfffe Selects "Component Video" input:
+# 0xfffd Selects "Composite Video" input:
+# 0xfffb Selects "S-Video" input:
+if( $desired_input eq "Composite" ) {
+    print "\nSetting Composite Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 1;
+    $gpio->[1] = 0;
+    $gpio->[0] = 1;
+} elsif ( $desired_input eq "S-Video" ) {
+    print "\nSetting S-Video Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 0;
+    $gpio->[1] = 1;
+    $gpio->[0] = 1;
+} elsif ( $desired_input eq "Component" ) {
+    print "\nSetting Component Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 1;
+    $gpio->[1] = 1;
     $gpio->[0] = 0;
-    $cya_gpio->write([0,1,1,1,1,1,1,1,
-		      1,1,1,1,1,1,1,1]);
-} elsif ( $desired_debug eq "disable" ) {
-    print "\nDisabling debug mode.\n\n";
+} elsif ( $desired_input eq "VGA" ) {
+    print "\nSetting VGA Input.\n\n";
+    $gpio->[3] = 1;
+    $gpio->[2] = 1;
+    $gpio->[1] = 1;
     $gpio->[0] = 1;
 } else {
-    die "Unknown debug mode '$desired_debug'.";
+    die "Unknown input '$desired_input'.";
 }
 
-$gpio = $cya_gpio->write($gpio);
-print "Ending CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
+$gpio = $sii_gpio->write($gpio);
+print "Ending SiI GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
 exit 0;

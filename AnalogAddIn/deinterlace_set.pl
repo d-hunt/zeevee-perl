@@ -3,7 +3,7 @@
 use warnings;
 use strict;
 
-use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
+use lib '../lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
@@ -125,11 +125,11 @@ print "Initial CYA GPIO state: ".Data::Dumper->Dump([$gpio], ["gpio"]);
 $gpio = $sii_gpio->read();
 
 if( $desired_mode eq "enable" ) {
-    print "\nEnabling Auto Phase and Position Detect.\n\n";
-    $gpio->[12] = 1;
+    print "\nEnabling deinterlace.\n\n";
+    $gpio->[10] = 1;
 } elsif ( $desired_mode eq "disable" ) {
-    print "\nDisabling Auto Phase and Position Detect.\n\n";
-    $gpio->[12] = 0;
+    print "\nDisabling deinterlace.\n\n";
+    $gpio->[10] = 0;
 } else {
     die "Unknown deinterlacing mode '$desired_mode'.";
 }
