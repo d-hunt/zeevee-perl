@@ -15,7 +15,7 @@ use IO::Select;
 
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '169.254.45.84';
+my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -129,9 +129,16 @@ $bridge->gpio([1,1,1,0,1,1,1,1]);
 $encoder->start("HDMI");
 $decoder->join($encoder->DeviceID.":HDMI:0",
 	       "0",
-	       "genlock" );
+#	       "genlock" );
+	       "fastswitch size 1920 1080 fps 60.000" );
+#	       "fastswitch size 1920 1080 fps 60.004" );
+#	       "fastswitch quantization AUTO size 1920 1080 fps 60 stretch" );
 # Little low-level, but gets the correct input selected. (add-in card.)
 $encoder->set_property("nodes[HDMI_DECODER:0].inputs[main:0].configuration.source.value", "1");
+
+sleep 2;
+my $hdmi_status = $encoder->hdmi_status();
+print Data::Dumper->Dump([$hdmi_status], ["HDMI Status"]);
 
 print "=== DONE. DeviceID = ".$encoder->DeviceID()."===\n";
 
