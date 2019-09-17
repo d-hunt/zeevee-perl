@@ -15,12 +15,12 @@ use IO::File;
 
 my $on_time = 30; # seconds.
 my $off_time = 30; # seconds.
-my $poll_wait_time = 10; # seconds.
+my $poll_wait_time = 15; # seconds.
 
-my %device_ids = ( 'Decoder' => 'd880399b0e2e',
-		   'Encoder_P1' => '',
-		   'Encoder_P2' => '',
-		   'Encoder_P3' => '' );
+my %device_ids = ( 'Decoder' => 'd88039eacce2',
+		   'Encoder_P1' => 'd880395993ee',
+		   'Encoder_P2' => 'd8803959aabf',
+		   'Encoder_P3' => 'd88039eb01f9' );
 my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
@@ -55,7 +55,7 @@ my %command = ( 'SessionInit'
 		'Awake'
 		=> 'curl -c cookie.txt -d "<Command><Standby><Deactivate/></Standby></Command>" -X POST --insecure '.$url_root.'/putxml' );
 
-system($command{'SessionInit'})
+system($command{'SessionInit'}) == 0
     or die "Error getting session cookie.";
 
 my $logfile = IO::File->new();
@@ -74,7 +74,7 @@ my @column_names = ( 'Epoch',
 		     'DeviceID',
 		     'isConnected',
 		     'Temperature',
-		     'Monitor State',
+		     'CoDec State',
 		     'Monitor Connected',
 		     'Monitor EDID',
 		     'Source Stable',
@@ -139,11 +139,11 @@ while(1) {
 	die "Bad programmer!";
     }
 
-    system($command{$current_state})
+    system($command{$current_state}) == 0
 	or die "Error sending command to set state $current_state";
 
     print scalar localtime ."\t";
-    print "Powered $current_state\n";
+    print "Setting State: $current_state\n";
     $change_time = time();
     sleep $poll_wait_time;
     
@@ -164,7 +164,7 @@ while(1) {
 		     'DeviceID' => $device->DeviceID(),
 		     'isConnected' => ( $device->is_connected() ? "YES" : "NO" ),
 		     'Temperature' => $device->__temperature(),
-		     'Monitor State' => $current_state,
+		     'CoDec State' => $current_state,
 		     'Monitor Connected' => JSON_bool_to_YN( $monitor_status->{'connected'} ),
 		     'Monitor EDID' => $monitor_status->{'edid'},
 		     'Source Stable' => JSON_bool_to_YN( $hdmi_status->{'source_stable'} ),
