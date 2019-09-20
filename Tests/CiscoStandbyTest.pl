@@ -17,11 +17,14 @@ my $on_time = 30; # seconds.
 my $off_time = 30; # seconds.
 my $poll_wait_time = 15; # seconds.
 
-my %device_ids = ( 'Decoder' => 'd88039eacce2',
+my %device_ids = ( 'Decoder_1' => 'd880395953aa',
+		   'Decoder_2' => 'd88039eacce2',
+		   'Decoder_3' => 'd88039eb23d7',
 		   'Encoder_P1' => 'd880395993ee',
 		   'Encoder_P2' => 'd8803959aabf',
 		   'Encoder_P3' => 'd88039eb01f9' );
-my $host = '172.16.1.90';
+#my $host = '172.16.1.90';
+my $host = '172.16.52.232';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 0;
@@ -46,7 +49,7 @@ foreach my $device_name (sort keys %device_ids) {
 				     } );
 }
 
-my $url_root = 'https://admin:admin@169.254.102.100';
+my $url_root = 'https://admin:admin@172.16.52.231';
 
 my %command = ( 'SessionInit'
 		=> 'curl -c cookie.txt -d "" -X POST --insecure '.$url_root.'/xmlapi/session/begin',
@@ -125,13 +128,17 @@ $| = 1;
 
 my $current_cycle = 0;
 my $current_state = 'Awake';
+my $hold_state = 0;
 my $global_start_time = time();
 my $change_time = undef;
 my $last_wake_time = int($global_start_time) + 1;
 while(1) {
     $current_cycle++;
 
-    if($current_state eq 'Awake') {
+    if($hold_state) {
+	$current_state = $current_state;
+	$hold_state = 0;
+    } elsif($current_state eq 'Awake') {
 	$current_state = 'Standby';
     } elsif($current_state eq 'Standby') {
 	$current_state = 'Awake';
@@ -189,6 +196,12 @@ while(1) {
 
 	$csv->print_hr( $logfile,
 			\%data );
+
+	# If any device has no input; hold our current state.
+	if( ($current_state eq 'Awake')
+	    && !($hdmi_status->{'source_stable'}) ) {
+	    $hold_state = 1;
+	}
     }
 
     $logfile->flush();
