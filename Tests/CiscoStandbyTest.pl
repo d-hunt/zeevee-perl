@@ -13,9 +13,9 @@ use Time::HiRes ( qw/sleep time/ );
 use IO::File;
 
 
-my $on_time = 30; # seconds.
-my $off_time = 30; # seconds.
-my $poll_wait_time = 15; # seconds.
+my $on_time = 15; # seconds.
+my $off_time = 15; # seconds.
+my $poll_wait_time = 8; # seconds.
 
 my %device_ids = ( 'Decoder_1' => 'd880395953aa',
 		   'Decoder_2' => 'd88039eacce2',
@@ -56,7 +56,9 @@ my %command = ( 'SessionInit'
 		'Standby'
 		=> 'curl -c cookie.txt -d "<Command><Standby><Activate/></Standby></Command>" -X POST --insecure '.$url_root.'/putxml',
 		'Awake'
-		=> 'curl -c cookie.txt -d "<Command><Standby><Deactivate/></Standby></Command>" -X POST --insecure '.$url_root.'/putxml' );
+		=> 'curl -c cookie.txt -d "<Command><Standby><Deactivate/></Standby></Command>" -X POST --insecure '.$url_root.'/putxml',
+		'PresentationStart'
+		=> 'curl -c cookie.txt -d "<Command><Presentation><Start/></Presentation></Command>" -X POST --insecure '.$url_root.'/putxml' );
 
 system($command{'SessionInit'}) == 0
     or die "Error getting session cookie.";
@@ -148,6 +150,12 @@ while(1) {
 
     system($command{$current_state}) == 0
 	or die "Error sending command to set state $current_state";
+
+
+    if($current_state eq 'Awake') {
+	system($command{'PresentationStart'}) == 0
+	    or die "Error sending command to set state $current_state";
+    }
 
     print scalar localtime ."\t";
     print "Setting State: $current_state\n";
