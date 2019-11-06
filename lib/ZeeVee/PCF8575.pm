@@ -57,9 +57,9 @@ sub read($) {
     # Read GPIO back.
     my $i2c_state_ref = 
 	$self->I2C->i2c_raw( {'Slave' => $self->Address(),
-				  'Commands' => [{ 'Command' => 'Read',
-						       'Length' => 2,
-						 },
+			      'Commands' => [{ 'Command' => 'Read',
+					       'Length' => 2,
+					     },
 				  ],
 			     } );
     my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
@@ -79,38 +79,51 @@ sub write($\@;) {
 
     # User wants to set the GPIO.
     my @state = @{$state_ref};
+    my $word = 0;
+    for( my $bit=0; $bit < 16; $bit++) {
+	$word += $state[$bit] << $bit;
+    }
+
+    my $value = $self->word_write($word);
+    @state = ();
+    for( my $bit=0; $bit < 16; $bit++) {
+        $state[$bit] = (($value >> $bit) & 0x01);
+    }
+
+    return \@state;
+}
+
+
+# Writes 16-bit word to PCF875.  Reads back value.
+sub word_write($$) {
+    my $self = shift;
+    my $word = shift;
+
+    # User wants to set the GPIO.
     # Apply mask. (1 is driven weak.)
     foreach my $bit (@{$self->WriteMask}) {
-	$state[$bit] = 1;
+        $word |= (0x0001 << $bit);
     }
-    my $char = 0;
-    for( my $bit=0; $bit < 16; $bit++) {
-	$char += $state[$bit] << $bit;
-    }
-    my $char_h = (($char >> 8) & 0xff);
-    my $char_l = (($char >> 0) & 0xff);
+    my $char_h = (($word >> 8) & 0xff);
+    my $char_l = (($word >> 0) & 0xff);
 
     my $i2c_state_ref = 
-	$self->I2C->i2c_raw( { 'Slave' => $self->Address(),
-				   'Commands' => [{ 'Command' => 'Write',
-							'Data' => [ $char_l,
-								    $char_h, ]
-						  },
-						  { 'Command' => 'Read',
-							'Length' => 2,
-						  },
+        $self->I2C->i2c_raw( { 'Slave' => $self->Address(),
+			       'Commands' => [{ 'Command' => 'Write',
+						'Data' => [ $char_l,
+							    $char_h, ]
+					      },
+					      { 'Command' => 'Read',
+						'Length' => 2,
+					      },
 				   ],
 			     } );
 
     # The read acts as a fence!
 
     my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
-    @state = ();
-    for( my $bit=0; $bit < 16; $bit++) {
-	$state[$bit] = (($value >> $bit) & 0x01);
-    }
 
-    return \@state;
+    return $value;
 }
 
 
@@ -144,7 +157,7 @@ sub stream_write($\@) {
 		    push @{$commands}, $current_command;
 		}
 		$current_command = { 'Command' => 'Write',
-					 'Data' => [] };
+				     'Data' => [] };
 	    }
 
 	    push @{$current_command->{'Data'}}, ($char_l, $char_h);
@@ -163,7 +176,7 @@ sub stream_write($\@) {
 
 	# The final read acts as a fence!
 	$current_command = { 'Command' => 'Read',
-				 'Length' => 2 };
+			     'Length' => 2 };
 	push @{$commands}, $current_command;
 	$current_command = undef;
 
