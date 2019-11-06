@@ -13,6 +13,7 @@ has ChunkSize => ( is => "ro" );
 has Bits => ( is => "ro" );
 has Base => ( is => "rw" );
 has Stream => ( is => "rw" );
+has SamplingStream => ( is => "rw" );
 
 # Constructor for SPI_GPIO object.
 sub new($\%) {
@@ -20,7 +21,7 @@ sub new($\%) {
     my $arg_ref = shift // {};
 
     unless( exists $arg_ref->{'GPIO'} ) {
-	die "SPI_GPIO can't work without a GPIO connection to device.  GPIO object must provide stream_write method.";
+	die "SPI_GPIO can't work without a GPIO connection to device.  GPIO object must provide stream_write and word_write methods.";
     }
     unless( exists $arg_ref->{'Timeout'} ) {
 	$arg_ref->{'Timeout'} = 10;
@@ -43,6 +44,10 @@ sub new($\%) {
     }
     unless( exists $arg_ref->{'Stream'} ) {
 	$arg_ref->{'Stream'} = [];
+    }
+
+    unless( exists $arg_ref->{'SamplingStream'} ) {
+	$arg_ref->{'SamplingStream'} = [];
     }
 
     my $self = $class->SUPER::new( $arg_ref );
@@ -86,12 +91,35 @@ sub send($) {
 }
 
 
+# Send the serialized stream; Read Back states on each bit and returns.
+sub send_receive($) {
+    my $self = shift;
+    my @word_stream = ();
+
+    foreach my $element (@{$self->Stream()}) {
+	my $ret_word = $self->GPIO->word_write($element);
+	push @word_stream, $ret_word;
+    }
+
+    # Replace our sent stream with read states.
+    $self->Stream(\@word_stream);
+
+    return;
+}
+
+
 # Serialize a string to a stream of 16-bit GPIO values.
-sub append_stream($$) {
+# Sampling is enabled by default.
+sub append_stream($$;$) {
     my $self = shift;
     my $string = shift;
+    my $sampling_enable = shift // 1;
     my @stream = ();
+    my @samplingstream = ();
     my $base_gpio = $self->Base();
+
+    $sampling_enable = 1 # Normalize boolean
+	if($sampling_enable);
 
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Clock'} );
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Select'} );
@@ -106,16 +134,55 @@ sub append_stream($$) {
 		if( $tx_bit == 0x00 );
 	    $tx_byte = $self->__set_bit( $tx_byte, $self->Bits->{'MOSI'} )
 		if( $tx_bit == 0x01 );
-	    push @stream, $tx_byte; 
+	    push @stream, $tx_byte;
+	    push @samplingstream, 0;
 
 	    $tx_byte = $self->__set_bit( $tx_byte, $self->Bits->{'Clock'} );
 	    push @stream, $tx_byte;
+	    push @samplingstream, $sampling_enable;
 	}
     }
 
     push @{$self->Stream()}, @stream;
+    push @{$self->SamplingStream()}, @samplingstream;
 
     return \@stream;
+}
+
+
+# Get the MISO bitstream from sampled bits; converted to a byte stream.
+sub get_sampled_stream($) {
+    my $self = shift;
+    my $string = "";
+    my $stream_length  = scalar(@{$self->Stream()});
+    my $samplingstream_length = scalar(@{$self->SamplingStream()});
+
+    die "SamplingStream size does not match Stream."
+	unless($samplingstream_length == $stream_length);
+
+    my $bit = 8;
+    my $byte = 0x00;
+    for( my $offset=0; $offset < $stream_length; $offset++ ) {
+	# Skip unwanted samples.
+	next if( $self->SamplingStream()->[$offset] == 0 );
+
+	# This is a sample we want.
+	$bit--;
+	my $sample = $self->Stream()->[$offset];
+	$byte = $self->__set_bit( $byte, $bit )
+	    if( $self->__get_bit( $sample, $self->Bits->{'MISO'} ) );
+
+	if( $bit == 0 ) {
+	    $string .= chr( $byte );
+	    $byte = 0x00;
+	    $bit = 8;
+	}
+    }
+
+    die "Incomplete word in sampled stream."
+	unless( $bit == 8 );
+
+    return $string;
 }
 
 
@@ -123,8 +190,10 @@ sub append_stream($$) {
 sub discard_stream($) {
     my $self = shift;
     my @stream = ();
+    my @samplingstream = ();
 
     $self->Stream(\@stream);
+    $self->SamplingStream(\@samplingstream);
 
     return \@stream;
 }
@@ -135,17 +204,21 @@ sub discard_stream($) {
 sub start_stream($) {
     my $self = shift;
     my @stream = ();
+    my @samplingstream = ();
     my $base_gpio = $self->Base();
 
     $self->discard_stream();
 
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Clock'} );
     push @stream, $base_gpio;
+    push @samplingstream, 0;
 
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Select'} );
     push @stream, $base_gpio;
+    push @samplingstream, 0;
 
     push @{$self->Stream()}, @stream;
+    push @{$self->SamplingStream()}, @samplingstream;
 
     return \@stream;
 }
@@ -155,6 +228,7 @@ sub start_stream($) {
 sub end_stream($) {
     my $self = shift;
     my @stream = ();
+    my @samplingstream = ();
     my $base_gpio = $self->Base();
 
     $base_gpio = $self->__clear_bit( $base_gpio, $self->Bits->{'Clock'} );
@@ -162,11 +236,14 @@ sub end_stream($) {
 
     $base_gpio = $self->__set_bit( $base_gpio, $self->Bits->{'Select'} );
     push @stream, $base_gpio;
+    push @samplingstream, 0;
 
     $base_gpio = $self->__set_bit( $base_gpio, $self->Bits->{'Clock'} );
     push @stream, $base_gpio;
+    push @samplingstream, 0;
 
     push @{$self->Stream()}, @stream;
+    push @{$self->SamplingStream()}, @samplingstream;
 
     return \@stream;
 }
@@ -178,6 +255,7 @@ sub command_stream($\%) {
     my $self = shift;
     my $definition = shift;
     my $string = "";
+    my $sampling_enable = 0; # Don't sample response to commands
 
     die "Unexpected command"
 	unless( ($definition->{'Command'} >> 8) == 0 );
@@ -197,7 +275,7 @@ sub command_stream($\%) {
     }
 
 
-    return $self->append_stream($string);
+    return $self->append_stream($string, $sampling_enable);
 }
 
 
@@ -224,6 +302,20 @@ sub __clear_bit($$$) {
     $byte &= 0xffff ^ (0x1 << $bit);
 
     return $byte;
+}
+
+# Get a bit
+# Private helper function
+sub __get_bit($$$) {
+    my $self = shift;
+    my $byte = shift;
+    my $bit = shift;
+
+    if(($byte & (0x1 << $bit)) == 0) {
+	return 0;
+    } else {
+	return 1;
+    }
 }
 
 1;
