@@ -32,13 +32,13 @@ sub new($\%) {
 	$arg_ref->{'PageSize'} = 256;
     }
     unless( exists $arg_ref->{'AddressWidth'} ) {
-	$arg_ref->{'PageSize'} = 24;
+	$arg_ref->{'AddressWidth'} = 24;
     }
     unless( exists $arg_ref->{'Timing'} ) {
 	$arg_ref->{'Timing'} = { 'BulkErase' => 6.0,
-				     'SectorErase' => 3.0,
-				     'PageProgram' => 0.005,
-				     'WriteStatusRegister' => 0.015,
+				 'SectorErase' => 3.0,
+				 'PageProgram' => 0.005,
+				 'WriteStatusRegister' => 0.015,
 	};
     }
 
@@ -128,8 +128,8 @@ sub page_program($\%) {
 
 	$self->SPI->start_stream();
 	$self->SPI->command_stream({ 'Command' => 0x02,
-					 'AddressWidth' => $self->AddressWidth(),
-					 'Address' => $address + $offset,
+				     'AddressWidth' => $self->AddressWidth(),
+				     'Address' => $address + $offset,
 				   });
 	$self->SPI->append_stream($page_data);
 	$self->SPI->end_stream();
@@ -142,6 +142,71 @@ sub page_program($\%) {
     }
 
     return;
+}
+
+
+# Read Identification
+sub read_identification($) {
+    my $self = shift;
+
+    my $id = undef;
+
+    $self->SPI->start_stream();
+    $self->SPI->command_stream({'Command' => 0x9f});
+    $self->SPI->append_stream('_'x3);
+    $self->SPI->end_stream();
+
+    $self->SPI->send_receive();
+    $id = $self->SPI->get_sampled_stream();
+
+    return $id;
+}
+
+
+# Read Identifcation and return as string.
+# Die if not known.
+sub read_identification_string($) {
+    my $self = shift;
+    my %known_ids = ( "\xef\x30\x11" => "Winbond W25X10CL",
+		      "\x20\x20\x11" => "Micron M252P10A",
+	);
+
+    my $id = $self->read_identification();
+
+    die "Unknown SPI Device ID: 0x".unpack( 'H*', $id )
+	unless( exists($known_ids{$id}) );
+
+    return $known_ids{$id};
+}
+
+
+# Read Data Bytes
+sub read_data($$$) {
+    my $self = shift;
+    my $address = shift;
+    my $length = shift;
+
+    my $data = "";
+    my $offset = 0;
+    while( $offset < $length ) {
+	my $chunk_length = $self->PageSize();
+	$chunk_length = $length - $offset
+	    if( ($offset + $chunk_length) > $length );
+
+	$self->SPI->start_stream();
+	$self->SPI->command_stream({'Command' => 0x03,
+				    'AddressWidth' => $self->AddressWidth(),
+				    'Address' => $address + $offset,
+				   });
+	$self->SPI->append_stream('_'x$chunk_length);
+	$self->SPI->end_stream();
+
+	$self->SPI->send_receive();
+	$data .= $self->SPI->get_sampled_stream();
+	$offset += $chunk_length;
+    }
+
+    return $data;
 }
 
 1;
