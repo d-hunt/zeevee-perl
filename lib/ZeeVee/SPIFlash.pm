@@ -115,6 +115,7 @@ sub page_program($\%) {
 
     my $data = $description->{'Data'};
     my $address = $description->{'Address'};
+    my $progress_enable = $description->{'ProgressEnable'} // 0;
 
     die "I don't know how to start in the middle of a page."
 	unless( ($address % $self->PageSize()) == 0 );
@@ -139,6 +140,8 @@ sub page_program($\%) {
 	sleep($self->Timing->{'PageProgram'});
 
 	$offset += $self->PageSize();
+	print "."
+	    if $progress_enable;
     }
 
     return;

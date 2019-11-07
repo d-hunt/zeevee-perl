@@ -194,6 +194,7 @@ print "Programming...\n";
 my $address = 0;
 $flash->page_program({ 'Address' => $address,
 		       'Data' => $data_string,
+		       'ProgressEnable' => 1,
 		     });
 $flash->write_disable();
 
