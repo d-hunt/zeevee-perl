@@ -120,6 +120,9 @@ sub page_program($\%) {
     die "I don't know how to start in the middle of a page."
 	unless( ($address % $self->PageSize()) == 0 );
 
+    local $| = 1
+	if($progress_enable);
+
     # Split to pages.
     my $offset = 0;
     while( $offset < length($data) ) {
