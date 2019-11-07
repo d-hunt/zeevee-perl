@@ -103,8 +103,6 @@ my $flash = new ZeeVee::SPIFlash( { SPI => $spi,
 
 
 # Temporary values...
-my $register_ref;
-my $register;
 my $gpio;
 
 # Set to 115200 bps.
@@ -133,12 +131,13 @@ read( FILE, $data_string, $max_file_size )
     or die "Error reading from file $filename.";
 close FILE;
 print "Read file $filename.  Length: ".length($data_string)." Bytes.\n";
+my $data_length = length($data_string);
 
 # Take away the write mask for SPI output pins.
 $cya_gpio->WriteMask([9, 10, 11, 14]);
 
 # Reset board for SPI access.
-print "Starting to write the SPI ROM.\n";
+print "Starting to read from the SPI ROM.\n";
 sleep 1.5;
 
 print "Resetting board.  LED on.\n";
@@ -149,16 +148,87 @@ print "\n";
 sleep 0.5;
 
 my $i2c_starttime = 0 - Time::HiRes::time();
+
+# Verify we're talking to the correct SPI flash. (Dies if not recognized)
+my $read_data = $flash->read_identification_string();
+print "Found SPI Device: $read_data.\n";
+
+
+# Verify a few places in the file;
+print "Reading some data to see if this part is already programmed.\n";
+my %verify_regions = ( 0 => 8, # Offest => Length pairs.
+		       310 => 8, # Negative offsets from end of file.
+		       93000 => 8,
+		       -8 => 8 );
+my $verify_pass = 0;
+foreach my $offset (keys %verify_regions) {
+    my $length = $verify_regions{$offset};
+    $offset += $data_length
+	if($offset < 0);
+    my $expect_data = substr($data_string, $offset, $length);
+    $read_data = $flash->read_data($offset, $length);
+
+    if($read_data eq $expect_data) {
+	$verify_pass = 1;
+    } else {
+	$verify_pass = 0;
+	last;
+    }
+}
+
+$i2c_starttime += Time::HiRes::time();
+print "It took $i2c_starttime seconds to verify SPI Flash.\n";
+
+if($verify_pass) {
+    warn "Superficially, this part appears programmed with provided image.  Aborting programming.";
+    exit 0; # This is not an error.
+}
+
+print "Programming is neeeded.\n";
+$i2c_starttime = 0 - Time::HiRes::time();
+
+print "Erasing...\n";
 $flash->bulk_erase();
+
+print "Programming...\n";
 my $address = 0;
 $flash->page_program({ 'Address' => $address,
-			   'Data' => $data_string,
+		       'Data' => $data_string,
 		     });
 $flash->write_disable();
+
 $i2c_starttime += Time::HiRes::time();
-print "It took $i2c_starttime seconds to program SPI Flash and interact with Aptovision API.\n";
+print "It took $i2c_starttime seconds to erase/program SPI Flash.\n";
+
+$i2c_starttime = 0 - Time::HiRes::time();
+
+# Verify What we wrote;
+print "Reading some data to verify programming.\n";
+$verify_pass = 0;
+foreach my $offset (keys %verify_regions) {
+    my $length = $verify_regions{$offset};
+    $offset += $data_length
+	if($offset < 0);
+    my $expect_data = substr($data_string, $offset, $length);
+    $read_data = $flash->read_data($offset, $length);
+
+    if($read_data eq $expect_data) {
+	$verify_pass = 1;
+    } else {
+	$verify_pass = 0;
+	last;
+    }
+}
+
+$i2c_starttime += Time::HiRes::time();
+print "It took $i2c_starttime seconds to verify SPI Flash.\n";
+
+if(!$verify_pass) {
+    die "ERROR: ##### Programming failed! #####";
+}
 
 sleep 0.5;
+
 
 print "Releasing reset.\n";
 $gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
