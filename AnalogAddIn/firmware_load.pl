@@ -99,6 +99,7 @@ my $flash = new ZeeVee::SPIFlash( { SPI => $spi,
 						    'PageProgram' => 0.005,
 						    'WriteStatusRegister' => 0.015,
 				    },
+				    Retries => 10,
 				  } );
 
 

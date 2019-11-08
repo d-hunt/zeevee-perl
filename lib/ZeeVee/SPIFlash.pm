@@ -13,6 +13,7 @@ has Debug => ( is => "ro" );
 has PageSize => ( is => "ro" );
 has AddressWidth => ( is => "ro" );
 has Timing => ( is => "ro" );
+has Retries => ( is => "ro" );
 
 # Constructor for SPIFlash object.
 sub new($\%) {
@@ -40,6 +41,9 @@ sub new($\%) {
 				 'PageProgram' => 0.005,
 				 'WriteStatusRegister' => 0.015,
 	};
+    }
+    unless( exists $arg_ref->{'Retries'} ) {
+	$arg_ref->{'Retries'} = 10;
     }
 
     my $self = $class->SUPER::new( $arg_ref );
@@ -116,6 +120,7 @@ sub page_program($\%) {
     my $data = $description->{'Data'};
     my $address = $description->{'Address'};
     my $progress_enable = $description->{'ProgressEnable'} // 0;
+    my $retry_left = $self->Retries();
 
     die "I don't know how to start in the middle of a page."
 	unless( ($address % $self->PageSize()) == 0 );
@@ -128,23 +133,35 @@ sub page_program($\%) {
     while( $offset < length($data) ) {
 	my $page_data = substr($data, $offset, $self->PageSize());
 
-	$self->write_enable();
+	eval { # This is a long process.  We'll try to recover if something goes wrong.
+	    $self->write_enable();
 
-	$self->SPI->start_stream();
-	$self->SPI->command_stream({ 'Command' => 0x02,
-				     'AddressWidth' => $self->AddressWidth(),
-				     'Address' => $address + $offset,
-				   });
-	$self->SPI->append_stream($page_data);
-	$self->SPI->end_stream();
+	    $self->SPI->start_stream();
+	    $self->SPI->command_stream({ 'Command' => 0x02,
+					 'AddressWidth' => $self->AddressWidth(),
+					 'Address' => $address + $offset,
+				       });
+	    $self->SPI->append_stream($page_data);
+	    $self->SPI->end_stream();
 
-	$self->SPI->send();
+	    $self->SPI->send();
 
-	sleep($self->Timing->{'PageProgram'});
-
-	$offset += $self->PageSize();
-	print "."
-	    if $progress_enable;
+	    sleep($self->Timing->{'PageProgram'});
+	};
+	unless( $@ ) {
+	    # Normal Progress.
+	    $offset += $self->PageSize();
+	    print "."
+		if $progress_enable;
+	    $retry_left = $self->Retries();
+	} else {
+	    # Something died while writing page.
+	    print "x"
+		if $progress_enable;
+	    warn "Error in SPI page_program: $@; Retrying...";
+	    die "Exhausted Retries!"
+		if(!$retry_left--)
+	}
     }
 
     return;
