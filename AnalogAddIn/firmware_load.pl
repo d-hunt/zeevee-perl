@@ -80,7 +80,7 @@ my $cya_gpio = new ZeeVee::PCF8575( { I2C => $bridge,
 my $spi = new ZeeVee::SPI_GPIO( { GPIO => $cya_gpio,
 				  Timeout => $timeout,
 				  Debug => $debug,
-				  ChunkSize => 512,
+				  ChunkSize => 128,
 				  Bits => { 'Select' => 12,
 						'Clock' => 13,
 						'MISO' => 14,
@@ -107,9 +107,9 @@ my $flash = new ZeeVee::SPIFlash( { SPI => $spi,
 my $gpio;
 
 # Set to 115200 bps.
-####### FIXME: Skipping for now because it's a pain
-#######   to keep in sync across invokations.
-# $bridge->change_baud_rate(115200);
+### Skipping this is OK because it's a pain
+###   to keep in sync across invokations.
+$bridge->change_baud_rate(115200);
 
 # Configure GPIO in/out/OD/weak
 $bridge->registerset([0x02, 0x03], [0xd5, 0x97]);
