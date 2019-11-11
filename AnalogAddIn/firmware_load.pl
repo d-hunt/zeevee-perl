@@ -198,6 +198,7 @@ $flash->page_program({ 'Address' => $address,
 		       'ProgressEnable' => 1,
 		     });
 $flash->write_disable();
+print "\n";
 
 $i2c_starttime += Time::HiRes::time();
 print "It took $i2c_starttime seconds to erase/program SPI Flash.\n";
@@ -232,9 +233,11 @@ if(!$verify_pass) {
 sleep 0.5;
 
 
-print "Releasing reset.\n";
-$gpio = $bridge->gpio([1,1,1,0,1,1,1,1]);
+print "Successful.  Releasing reset.  Turning off LED.\n";
+$gpio = $bridge->gpio([1,1,1,1,1,1,1,1]);
 print "GPIO state ".Data::Dumper->Dump([$gpio], ["gpio"]);
 
 $apto->close();
+
+print "===== Done with $device_id =====\n";
 exit 0;
