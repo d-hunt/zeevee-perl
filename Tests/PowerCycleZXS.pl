@@ -26,10 +26,13 @@ my $power_cycle_interval = ( 122*60 - 170 ) / 4; # seconds.
 my $power_cycle_off_time = 120; # seconds.
 my $power_cycle_on_time = $power_cycle_interval - $power_cycle_off_time; # seconds.
 
-my %device_ids = ( '1 Encoder Cu' => '0016c04dc275',
-		   '2 Decoder Cu' => '0016c04dc383',
-		   '3 Encoder Fi' => '0016c04dc373',
-		   '4 Decoder Fi' => '0016c04dc37a', );
+my %device_ids = ( 'C1 Encoder Cu'        => '0016c04dc275',
+		   'C2 Decoder Cu'        => '0016c04dc383',
+		   'F1 Encoder Fi'        => '0016c04dc373',
+		   'F2 Decoder Fi'        => '0016c04dc37a',
+		   'C3 Capital RX ZXS Cu' => 'd880395909e9',
+		   'F3 Capital RX ZXS Fi' => 'd880395a8dca',
+		   'M4 Capital Monitor'   => 'd880399b248a', );
 my $host = '10.10.10.1';
 my $port = 6970;
 my $timeout = 10;
