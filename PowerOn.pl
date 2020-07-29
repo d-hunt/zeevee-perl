@@ -19,10 +19,10 @@ my $power_switch = new ZeeVee::WebPowerSwitch( { Host => '10.10.10.3',
 						 Debug => 0,
 					       } );
 
-# Power Cycle.
+# Power on.
 print scalar localtime ."\t";
-print "Cycling Power:     Port $port.\n";
-$power_switch->powerCycle($port);
+print "Turning Power On:  Port $port.\n";
+$power_switch->powerOn($port);
 
 exit 0;
 
