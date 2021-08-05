@@ -19,7 +19,7 @@ my $device_id = 'd880399acbf4';
 my $host = '172.16.1.90';
 my $port = 6970;
 my $timeout = 10;
-my $debug = 1;
+my $debug = 0;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
@@ -75,21 +75,31 @@ if( lc($hdmiport) eq lc('HDMI') ) {
     die "I only know of HDMI or AddIn ports.";
 }
 
+# Start autoflushing STDOUT
+$| = 1;
 
 print "Minimum v2:1 required.  Version: ".$glue->version()."\n";
 
 sub send_command {
     my $command = shift;
-
-    $uart->transmit($command);
+    my $retries = 5;
 
     my $rx = "";
-    my $start_time = time();
     do {
-	$rx .= $uart->receive();
-	warn "Timeout waiting to receive byte from UART."
-	    if($timeout < (time() - $start_time) );
-    } while ( substr($rx,-1,1) ne "\n" );
+	$uart->transmit($command);
+
+	my $start_time = time();
+	{ # BLOCK For 'last' to work as expected.
+	    do {
+		$rx .= $uart->receive();
+		if($timeout < (time() - $start_time) ) {
+		    warn "Timeout waiting to receive byte from UART.";
+		    last;
+		}
+	    } while ( substr($rx,-1,1) ne "\n" );
+	} # <-- 'last' comes here.
+    } while( substr($rx,-1,1) ne "\n"
+	     && --$retries );
     chomp $rx;
     print "Response: $rx\n";
 }
