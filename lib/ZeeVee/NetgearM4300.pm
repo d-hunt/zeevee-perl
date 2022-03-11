@@ -82,7 +82,7 @@ sub powerOn($$) {
     my $port = shift;
     my $cmd = "poe";
 
-    $self->interface($port);
+    $self->interface_mode($port);
 
     return $self->send("$cmd");
 }
@@ -96,7 +96,7 @@ sub powerOff($$) {
     my $port = shift;
     my $cmd = "no poe";
 
-    $self->interface($port);
+    $self->interface_mode($port);
 
     return $self->send("$cmd");
 }
@@ -148,7 +148,7 @@ sub keepalive($) {
 # Change to interface config mode.
 # Arguments:
 #   port number
-sub interface($$) {
+sub interface_mode($$) {
     my $self = shift;
     my $port = shift;
     my $cmd = "interface ";
