@@ -13,6 +13,7 @@ use ZeeVee::PCF8575;
 use ZeeVee::SPI_GPIO;
 use ZeeVee::SPIFlash;
 use ZeeVee::WebPowerSwitch;
+use ZeeVee::NetgearM4300;
 use Text::CSV;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep time/ );
@@ -37,6 +38,16 @@ my %device_ids = ( '1 Capital-RX-SBBi3 '  => 'd880395909e9',
 		   '7 Capital-RX-ZXS-D6'  => 'd880395a8dca',
 		   '8 Capital-TX-Monitor' => 'd88039ead026', );
 
+my @power_types = ( 'AC', 'PoE' );
+my %power_ports = ( 'AC'  => [1, 2, 3, 4, 5, 6],
+		    'PoE' => [1, 2, 3, 4, 5, 6], );
+my @power_transitions = ( {'AC'  => 'ON' }, # Note: ON-to-ON transition not implemented
+			  {'AC'  => 'OFF' },
+			  {'PoE' => 'ON' },
+			  {'PoE' => 'OFF' },
+			  {'AC'  => 'ON',  'PoE' => 'ON' },
+			  {'AC'  => 'OFF', 'PoE' => 'OFF' }, );
+
 my $host = '10.10.10.1';
 my $port = 6970;
 my $timeout = 10;
@@ -44,13 +55,23 @@ my $debug = 0;
 my @output = ();
 my $json_template = '/\{.*\}\n/';
 
-my $power_switch = new ZeeVee::WebPowerSwitch( { Host => '10.10.10.3',
-						 Port => 80,
-						 User => 'admin',
-						 Password => 'zazzle',
-						 Timeout => 10,
-						 Debug => 0,
-					       } );
+my %power_switch;
+$power_switch{'AC'} = new ZeeVee::WebPowerSwitch( { Host => '10.10.10.3',
+						    Port => 80,
+						    User => 'admin',
+						    Password => 'zazzle',
+						    Timeout => 10,
+						    Debug => 0,
+						  } );
+
+$power_switch{'PoE'} = new ZeeVee::NetgearM4300( { Host => '169.254.100.100',
+						   Port => 23,
+						   User => 'admin',
+						   Password => '',
+						   Slot => '1/0',
+						   Timeout => 10,
+						   Debug => 0,
+						 } );
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -132,23 +153,23 @@ sub JSON_bool_to_YN($) {
 }
 
 # Power off in preperation.
-print scalar localtime ."\t";
-print "Turning off AC Power.\n";
-$power_switch->powerOff(1);
-$power_switch->powerOff(2);
-$power_switch->powerOff(3);
-$power_switch->powerOff(4);
-$power_switch->powerOff(5);
-$power_switch->powerOff(6);
+my %power_state;
+foreach my $power_type ( @power_types ) {
+    print scalar localtime ."\t";
+    print "Turning off $power_type Power.\n";
+    foreach my $power_port ( $power_ports{$power_type} ) {
+	$power_switch{$power_type}->powerOff($power_port);
+    }
+    $power_state{$power_type} = 'OFF';
+}
 sleep 2;
 # Start autoflushing STDOUT
 $| = 1;
 
 my $current_cycle = 0;
 my $global_start_time = time();
-my $power_state = "OFF";
-my $power_state_poe = "ON";
 my $power_on_time = undef;
+my $power_transition_index = 0;
 my $last_wake_time = int($global_start_time) + 1;
 while(1) {
     my $current_time = time();
@@ -157,32 +178,38 @@ while(1) {
 	if( defined( $power_on_time ) );
 
     my $modulo_cycle_time = ($current_time - $global_start_time) % $power_cycle_interval;
-    if( ($power_state eq "ON")
+    if( ("ON" ~~ [values %power_state])
 	&& $modulo_cycle_time > $power_cycle_on_time ) {
-	print scalar localtime ."\t";
-	print "Turning off AC Power.\n";
-	$power_switch->powerOff(1);
-	$power_switch->powerOff(2);
-	$power_switch->powerOff(3);
-	$power_switch->powerOff(4);
-	$power_switch->powerOff(5);
-	$power_switch->powerOff(6);
-	$power_state = "OFF";
+	my %transitions = %{$power_transitions[$power_transition_index]};
+	die "On-to-on transition not implemented"
+	    if( "ON" ~~ [values %transitions] );
+	foreach my $power_type ( keys %transitions ) {
+	    print scalar localtime ."\t";
+	    print "Turning off $power_type Power.\n";
+	    foreach my $power_port ( $power_ports{$power_type} ) {
+		$power_switch{$power_type}->powerOff($power_port);
+	    }
+	    $power_state{$power_type} = 'OFF';
+	}
 	$power_on_time = undef;
-    } elsif( ($power_state eq "OFF")
+    } elsif( !("ON" ~~ [values %power_state])
 	     && $modulo_cycle_time < $power_cycle_on_time ) {
-	print scalar localtime ."\t";
-	print "Turning on Power.\n";
-	$power_switch->powerOn(1);
-	$power_switch->powerOn(2);
-	$power_switch->powerOn(3);
-	$power_switch->powerOn(4);
-	$power_switch->powerOn(5);
-	$power_switch->powerOn(6);
-	$power_state = "ON";
+	my %transitions = %{$power_transitions[$power_transition_index]};
+	die "Off-to-off transition not implemented"
+	    if( "OFF" ~~ [values %transitions] );
+	foreach my $power_type ( keys %transitions ) {
+	    print scalar localtime ."\t";
+	    print "Turning on $power_type Power.\n";
+	    foreach my $power_port ( $power_ports{$power_type} ) {
+		$power_switch{$power_type}->powerOn($power_port);
+	    }
+	    $power_state{$power_type} = 'ON';
+	}
 	$power_on_time = time();
 	$current_cycle++;
     }
+    $power_transition_index++;
+    $power_transition_index %= scalar @power_transitions;
 
     # Check and log each device status.
     foreach my $name (sort keys %devices) {
@@ -192,8 +219,8 @@ while(1) {
 	my %data = ( 'Epoch' => $current_time,
 		     'Date' => scalar localtime($current_time),
 		     'Power Cycle' => $current_cycle,
-		     'Power State' => $power_state,
-		     'PoE State' => $power_state_poe,
+		     'Power State' => $power_state{'AC'},
+		     'PoE State' => $power_state{'PoE'},
 		     'Up Time' => $up_time,
 		     'Device Name' => $name,
 		     'DeviceID' => $device->DeviceID(),
