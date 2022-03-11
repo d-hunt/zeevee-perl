@@ -157,7 +157,7 @@ my %power_state;
 foreach my $power_type ( @power_types ) {
     print scalar localtime ."\t";
     print "Turning off $power_type Power.\n";
-    foreach my $power_port ( $power_ports{$power_type} ) {
+    foreach my $power_port ( @{$power_ports{$power_type}} ) {
         $power_switch{$power_type}->powerOff($power_port);
     }
     $power_state{$power_type} = 'OFF';
@@ -187,7 +187,7 @@ while(1) {
         foreach my $power_type ( keys %transitions ) {
             print scalar localtime ."\t";
             print "Turning off $power_type Power.\n";
-            foreach my $power_port ( $power_ports{$power_type} ) {
+            foreach my $power_port ( @{$power_ports{$power_type}} ) {
                 $power_switch{$power_type}->powerOff($power_port);
             }
             $power_state{$power_type} = 'OFF';
@@ -204,7 +204,7 @@ while(1) {
         foreach my $power_type ( keys %transitions ) {
             print scalar localtime ."\t";
             print "Turning on $power_type Power.\n";
-            foreach my $power_port ( $power_ports{$power_type} ) {
+            foreach my $power_port ( @{$power_ports{$power_type}} ) {
                 $power_switch{$power_type}->powerOn($power_port);
             }
             $power_state{$power_type} = 'ON';
