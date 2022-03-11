@@ -27,16 +27,16 @@ my $power_cycle_interval = ( 122*60 - 170 ) / 4; # seconds.
 my $power_cycle_off_time = 120; # seconds.
 my $power_cycle_on_time = $power_cycle_interval - $power_cycle_off_time; # seconds.
 
-my %device_ids = ( '1 Capital-RX-SBBi3 '  => 'd880395909e9',
-                   '2 Capital-TX-ZXS-E1'  => 'd88039eb5b3b',
-                   '3 DUT-ZXS-E1'         => '6cdffb000252',
-                   # 'x DUT-ZXS-D2'         => '6cdffb000258', # Bricked.
-                   'x DUT-ZXS-E3'         => '6cdffb000256', # Not in video path, but alive.
-                   '4 DUT-ZXS-D4'         => '6cdffb00025a',
-                   '5 DUT-ZXS-E5'         => '6cdffb000254',
-                   '6 DUT-ZXS-D6'         => '6cdffb00025c',
-                   '7 Capital-RX-ZXS-D6'  => 'd880395a8dca',
-                   '8 Capital-TX-Monitor' => 'd88039ead026', );
+my %device_ids = ( '01 Capital-RX-SBBi3 '  => 'd880395909e9',
+                   '02 Capital-TX-ZXS-E1'  => 'd88039eb5b3b',
+                   '03 DUT-ZXS-E1'         => '6cdffb000252',
+                   '04 DUT-ZXS-D2'         => '6cdffb000258',
+                   '05 DUT-ZXS-E3'         => '6cdffb000256',
+                   '06 DUT-ZXS-D4'         => '6cdffb00025a',
+                   '07 DUT-ZXS-E5'         => '6cdffb000254',
+                   '08 DUT-ZXS-D6'         => '6cdffb00025c',
+                   '09 Capital-RX-ZXS-D6'  => 'd880395a8dca',
+                   '10 Capital-TX-Monitor' => 'd88039ead026', );
 
 my @power_types = ( 'AC', 'PoE' );
 my %power_ports = ( 'AC'  => [1, 2, 3, 4, 5, 6],
