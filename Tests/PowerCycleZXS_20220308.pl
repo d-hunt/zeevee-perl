@@ -182,7 +182,7 @@ while(1) {
         && $modulo_cycle_time > $power_cycle_on_time ) {
         my %transitions = %{$power_transitions[$power_transition_index++]};
         $power_transition_index %= scalar @power_transitions;
-        die "On-to-on transition not implemented"
+        warn "On-to-on transition not implemented"
             if( "ON" ~~ [values %transitions] );
         foreach my $power_type ( keys %transitions ) {
             print scalar localtime ."\t";
@@ -193,13 +193,13 @@ while(1) {
             $power_state{$power_type} = 'OFF';
         }
         $power_on_time = undef;
-        die "Some power still remains ON."
+        warn "Some power still remains ON."
             if( "ON" ~~ [values %power_state] );
     } elsif( !("ON" ~~ [values %power_state])
              && $modulo_cycle_time < $power_cycle_on_time ) {
         my %transitions = %{$power_transitions[$power_transition_index++]};
         $power_transition_index %= scalar @power_transitions;
-        die "Off-to-off transition not implemented"
+        warn "Off-to-off transition not implemented"
             if( "OFF" ~~ [values %transitions] );
         foreach my $power_type ( keys %transitions ) {
             print scalar localtime ."\t";
@@ -211,7 +211,7 @@ while(1) {
         }
         $power_on_time = time();
         $current_cycle++;
-        die "There is no power ON."
+        warn "There is no power ON."
             if( !("ON" ~~ [values %power_state]) );
     }
 
