@@ -74,9 +74,7 @@ sub new($\%) {
 sub initialize($) {
     my $self = shift;
 
-    $self->send( "require blueriver_api 2.11.0" );
-    pop @{$self->Results}; # Discard.
-    $self->send( "require multiview 1.1.0" );
+    $self->send( "require blueriver_api 3.0.0.0" );
     pop @{$self->Results}; # Discard.
     $self->send( "mode async off" );
     pop @{$self->Results}; # Discard.

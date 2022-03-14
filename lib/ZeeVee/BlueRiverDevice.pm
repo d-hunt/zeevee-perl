@@ -374,7 +374,7 @@ sub icron_status($) {
     my $icron_status = undef;
 
     # Matches both _LOCAL and _REMOTE types.
-    my $node = $self->get_node_by_type('USB_ICRON_CHIP_');
+    my $node = $self->get_node_by_type('USB_ICRON');
     if( defined($node) ) {
 	$icron_status = $node->{'status'};
     }
