@@ -14,6 +14,7 @@ has Timeout => ( is => "ro" );
 has VideoTimeout => ( is => "ro" );
 has Debug => ( is => "ro" );
 has AptoDevice =>  ( is => "rw" );
+has AptoNetStat => ( is => "rw" );
 
 # Constructor for BlueRiverDevice object.
 sub new($\%) {
@@ -53,6 +54,7 @@ sub initialize($) {
 
     # Get and store shadow copy of state.
     $self->poll();
+    $self->poll_netstat();
 
     return;
 }
@@ -94,6 +96,19 @@ sub poll_events($$) {
     return @event_ids;
 }
 
+
+# Poll for network statistics and store in internal shadow.
+# Returns the result hash reference too.
+sub poll_netstat($) {
+    my $self = shift;
+
+    # Get and store shadow copy of network status.
+    $self->Apto->send( "netstat ".$self->DeviceID." read" );
+    $self->Apto->fence();
+    $self->AptoNetStat( pop @{$self->Apto->Results} );
+
+    return $self->AptoNetStat();
+}
 
 # Request a list of event_ids
 # Return array of their results.
@@ -381,6 +396,32 @@ sub icron_status($) {
 
     return $icron_status;
 }
+
+# Get and return Uptime (In netstat)
+sub uptime($) {
+    my $self = shift;
+
+    # Refresh self-view...
+    $self->poll_netstat();
+
+    return $self->__uptime();
+}
+
+
+# Internal (no poll) get and return Uptime (In netstat)
+sub __uptime($) {
+    my $self = shift;
+
+    my $uptime = undef;
+    foreach my $device ( @{$self->AptoNetStat->{'statistics'}} ) {
+	die "Can't handle more than one device."
+	    if( defined($uptime) );
+	$uptime = $device->{'device_up_time'}
+    }
+
+    return $uptime;
+}
+
 
 # Reboot Device and wait for it come back up.
 sub reboot($) {
