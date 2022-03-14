@@ -63,7 +63,7 @@ foreach my $name (sort keys %devices) {
     my $uptime = $device->uptime();
     if(defined $uptime) {
 	my $upsince = scalar localtime($current_time - $uptime);
-	print "$name : $uptime (since $upsince)\n";
+	print "$name : $uptime\t(since $upsince)\n";
     } else {
 	print "$name : <Not Supported>\n";
     }
