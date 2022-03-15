@@ -233,7 +233,7 @@ while(1) {
                      'Device Name' => $name,
                      'DeviceID' => $device->DeviceID(),
                      'isConnected' => ( $device->is_connected() ? "YES" : "NO" ),
-                     'Device Up Time' => $device->__uptime(),
+                     'Device Up Time' => $device->uptime(),
                      'Temperature' => $device->__temperature(),
                      'Source Stable' => JSON_bool_to_YN( $hdmi_status->{'source_stable'} ),
                      'Video Width' => $hdmi_status->{'video'}->{'width'},
