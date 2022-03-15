@@ -7,6 +7,7 @@ use strict;
 use ZeeVee::Aptovision_API;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
+use Storable ();
 
 has DeviceID => ( is => "ro" );
 has Apto => ( is => "ro" );
@@ -422,6 +423,76 @@ sub __uptime($) {
     return $uptime;
 }
 
+
+# Clear network statistics.
+sub network_status_clear($) {
+    my $self = shift;
+
+    $self->Apto->send( "netstat ".$self->DeviceID." clear" );
+    $self->Apto->fence();
+    my $result = pop @{$self->Apto->Results};
+
+    foreach my $error ( @{$result->{'error'}} ) {
+	if( $error->{'device_id'} eq $self->DeviceID ) {
+	    warn "Got error while clearing network statistics:\n"
+		. "    " . $error->{'reason'} . " : " . $error->{'message'}
+	}
+    }
+
+    # Refresh self-view of cleared stats.
+    $self->poll_netstat();
+
+    return;
+}
+
+
+# Select network statistics (bandwidth).
+# Optional Parameter: a string: comma-separated list of bandwidth channels.
+# Most useful are: all, none (default), total.
+sub network_status_select($$) {
+    my $self = shift;
+    my $select_list = shift // 'none';
+
+    $self->Apto->send( "netstat ".$self->DeviceID." select ".$select_list );
+    $self->Apto->fence();
+    my $result = pop @{$self->Apto->Results};
+
+    foreach my $error ( @{$result->{'error'}} ) {
+	if( $error->{'device_id'} eq $self->DeviceID ) {
+	    warn "Got error while selecting network statistics:\n"
+		. "    " . $error->{'reason'} . " : " . $error->{'message'}
+	}
+    }
+
+    return;
+}
+
+
+# Get and return Network statistics.
+sub network_status_read($) {
+    my $self = shift;
+    my %stats = ();
+
+    # Refresh self-view...
+    $self->poll_netstat();
+
+    # Reorganize to a hash-of-hashes.
+    foreach my $device ( @{$self->AptoNetStat->{'statistics'}} ) {
+	die "Can't handle more than one device."
+	    unless( $device->{'device_id'} eq $self->DeviceID );
+	foreach my $datapath ( @{$device->{'data_paths'}} ) {
+	    my %statscopy = %{Storable::dclone($datapath)};
+	    my $type = $statscopy{'type'};
+	    delete($statscopy{'type'});
+	    die "This is new.  Can't handle more than one port."
+		unless($statscopy{'index'} == 0 );
+	    delete($statscopy{'index'});
+	    $stats{$type} = \%statscopy;
+	}
+    }
+
+    return %stats;
+}
 
 # Reboot Device and wait for it come back up.
 sub reboot($) {
