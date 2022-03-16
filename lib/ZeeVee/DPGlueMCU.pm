@@ -598,7 +598,7 @@ sub EP_BB_read_block($$) {
     # Skipping binary transfer end marker.
     my $block = substr( $rx,
 			$address_bytes,
-			-1*length($self->BinaryExitString()) ); 
+			-1*length($self->BinaryExitString()) );
 
     return $block;
 }

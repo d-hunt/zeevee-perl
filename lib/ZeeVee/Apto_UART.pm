@@ -128,7 +128,7 @@ sub transmit($$) {
 
     $tx_escaped = backslash($tx);
     print "Escaped string to transmit: '$tx_escaped'\n"
-	if( $self->Debug > 1 );    
+	if( $self->Debug > 1 );
 
     $self->Device->send( "RS232:1", $tx_escaped );
 
@@ -152,7 +152,7 @@ sub receive($) {
     }
 
     print "Escaped string received: '$rx_escaped'\n"
-	if( $self->Debug > 1 );    
+	if( $self->Debug > 1 );
     $rx = unbackslash($rx_escaped);
 
     return $rx;

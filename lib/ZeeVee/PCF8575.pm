@@ -55,7 +55,7 @@ sub read($) {
     my $self = shift;
 
     # Read GPIO back.
-    my $i2c_state_ref = 
+    my $i2c_state_ref =
 	$self->I2C->i2c_raw( {'Slave' => $self->Address(),
 			      'Commands' => [{ 'Command' => 'Read',
 					       'Length' => 2,
@@ -107,7 +107,7 @@ sub word_write($$) {
     my $char_h = (($word >> 8) & 0xff);
     my $char_l = (($word >> 0) & 0xff);
 
-    my $i2c_state_ref = 
+    my $i2c_state_ref =
         $self->I2C->i2c_raw( { 'Slave' => $self->Address(),
 			       'Commands' => [{ 'Command' => 'Write',
 						'Data' => [ $char_l,

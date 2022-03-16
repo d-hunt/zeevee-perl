@@ -200,7 +200,7 @@ sub login($) {
 
     die "Prompt hostname $prompt_host is a dangerous one for our regexp."
 	if ($prompt_host !~ /^[-_ \w]+$/);
-    
+
     # Construct a better prompt based on hostname
     $prompt_re = '/\('.$prompt_host.'\) ';
     $prompt_re .= '(\(.*\))?';
@@ -208,7 +208,7 @@ sub login($) {
     $prompt_re .= '$/';
     print "%DEBUG: Setting prompt to '$prompt_re'\n"
 	if( $self->Debug >= 1 );
-    
+
     $self->Telnet->prompt($prompt_re);
 
     return;
@@ -228,4 +228,3 @@ __END__
 
 # CLEAN UP AUTOMATICALLY on destruction??
 $telnet->close();
-

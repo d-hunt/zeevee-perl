@@ -470,7 +470,7 @@ sub bulk_erase($) {
 # STBL_WRITE_PERM_UNPROTECT()
 # STBL_READOUT_PERM_UNPROTECT()
 # STBL_ERASE(0xFFFF, NULL);
-# all to -> Send_RQ();    
+# all to -> Send_RQ();
 
 
 ###################################################3

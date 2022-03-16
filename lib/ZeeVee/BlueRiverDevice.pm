@@ -345,11 +345,11 @@ sub hdmi_status($$) {
 	    if( $self->VideoTimeout() < (time() - $start_time) );
 	sleep 0.5;
     } until( !defined($expect_stable)
-	     || ( $expect_stable 
-		  && ($hdmi_status->{'video'}->{'height'} > 0) 
+	     || ( $expect_stable
+		  && ($hdmi_status->{'video'}->{'height'} > 0)
 		  && ($hdmi_status->{'video'}->{'height'} <= 4096) )
 	     || ( !$expect_stable
-		  && !( ($hdmi_status->{'video'}->{'height'} > 0) 
+		  && !( ($hdmi_status->{'video'}->{'height'} > 0)
 			&& ($hdmi_status->{'video'}->{'height'} <= 4096) ) ));
 
 

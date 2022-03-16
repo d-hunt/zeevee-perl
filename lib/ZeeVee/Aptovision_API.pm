@@ -128,7 +128,7 @@ sub expect($$) {
 	    $unexpected .= "SUCCESS status with 'error' defined.\n";
 	}
 	if( defined($JSRef->{'request_id'}) ) {
-	    if( exists($self->{'Requests'}->{"$JSRef->{'request_id'}"}) ) {	
+	    if( exists($self->{'Requests'}->{"$JSRef->{'request_id'}"}) ) {
 		# This must be a response to an earlier request; take off the
 		# pending requests hash and record the result.
 		delete $self->{'Requests'}->{"$JSRef->{'request_id'}"};
@@ -147,7 +147,7 @@ sub expect($$) {
 	}
 	# Add to Requests unless this request already exists.
 	$self->{'Requests'}->{"$JSRef->{'request_id'}"} = "$cmd"
-	    unless( exists($self->{'Requests'}->{"$JSRef->{'request_id'}"}) )	
+	    unless( exists($self->{'Requests'}->{"$JSRef->{'request_id'}"}) )
     } else {
 	$unexpected .= "Unimplemented status '".$JSRef->{'status'}."' received.\n";
     }
@@ -250,7 +250,7 @@ sub fence($) {
 		if( $self->Debug > 1 );
 	    my $response = $self->send( "request $request_id" );
 	    push @fetched_requests, $request_id
-		if( ($response->{'status'} eq "SUCCESS") ) 
+		if( ($response->{'status'} eq "SUCCESS") )
 	}
 	die "Timeout on waiting for requests (fence, storing results)."
 	    if( $self->Timeout() < (time() - $start_time) )
