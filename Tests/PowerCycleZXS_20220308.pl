@@ -139,6 +139,7 @@ my @column_names = ( 'Epoch',
                      'VD vsync_width',
                      'VD hdmi_vic',
                      'VD pixel_clock',
+                     'Network Errors',
     );
 $csv->column_names( \@column_names );
 $csv->print( $logfile, \@column_names );
@@ -223,6 +224,7 @@ while(1) {
     foreach my $name (sort keys %devices) {
         my $device = $devices{$name};
         my $hdmi_status = $device->hdmi_status();
+        my $network_status = $device->network_status_read_flags();
         # The basic data we're collecting
         my %data = ( 'Epoch' => $current_time,
                      'Date' => scalar localtime($current_time),
@@ -244,6 +246,7 @@ while(1) {
                      'Video BPP' => $hdmi_status->{'video'}->{'bits_per_pixel'},
                      'HDCP Protected' => JSON_bool_to_YN( $hdmi_status->{'hdcp_protected'} ),
                      'HDCP Version' => $hdmi_status->{'hdcp_version'},
+                     'Network Errors' => $network_status,
             );
 
         # Iterate through video_details and add those to data we keep too.
@@ -262,13 +265,13 @@ while(1) {
     $logfile->flush();
 
     # Wait for next 5s mark.
-    $last_wake_time += 7.5;
+    $last_wake_time += 10;
     $current_time = time();
     if($last_wake_time > $current_time) {
         sleep $last_wake_time - $current_time;
     } else {
-        $last_wake_time += 7.5;
-        warn "Fell behind on 5s polls at $current_time.  Buying extra time.";
+        $last_wake_time += 10;
+        warn "Fell behind on 10s polls at $current_time.  Buying extra time.";
     }
 }
 
