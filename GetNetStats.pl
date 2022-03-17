@@ -73,6 +73,8 @@ foreach my $name (sort keys %devices) {
     }
 
     print Data::Dumper->Dump([\%stats], ["Device ".$name]);
+
+    print "Error Flags: ".$device->network_status_read_flags()."\n";
     print "\n";
 }
 

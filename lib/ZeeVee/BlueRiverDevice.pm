@@ -4,6 +4,7 @@ use Class::Accessor "antlers";
 
 use warnings;
 use strict;
+use experimental 'smartmatch';
 use ZeeVee::Aptovision_API;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
@@ -492,6 +493,42 @@ sub network_status_read($) {
     }
 
     return %stats;
+}
+
+# Get and return Network statistic error flags.
+# Returns a comma-separated list of the names of boolean error flags and
+#   non-zero error counters.
+sub network_status_read_flags($) {
+    my $self = shift;
+    my %stats = $self->network_status_read();
+    my @flags = ();
+    my @use_stats = (
+	'counters',
+	'dropped_frames',
+	'errors',
+	);
+    my %shortnames = (
+	'10G_RECEIVER_EGRESS'	  => '10G_RX_EG',
+	'10G_RECEIVER_INGRESS'	  => '10G_RX_IN',
+	'10G_TRANSMITTER_EGRESS'  => '10G_TX_EG',
+	'10G_TRANSMITTER_INGRESS' => '10G_TX_IN',
+	);
+
+    foreach my $datapath_name ( keys %stats ) {
+	my %datapath = %{$stats{$datapath_name}};
+	my $datapath_shortname = $shortnames{$datapath_name} // $datapath_name;
+	foreach my $statgroup_name ( keys %datapath ) {
+	    my %statgroup = %{$datapath{$statgroup_name}};
+	    next unless ( $statgroup_name ~~ @use_stats );
+	    foreach my $stat_name ( keys %statgroup ) {
+		my $stat = $statgroup{$stat_name};
+		push @flags, "$datapath_shortname:$statgroup_name:$stat_name"
+		    if($stat);
+	    }
+	}
+    }
+
+    return CORE::join(', ', @flags);
 }
 
 # Reboot Device and wait for it come back up.
