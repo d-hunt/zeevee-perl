@@ -514,13 +514,13 @@ sub network_status_read_flags($) {
 	'10G_TRANSMITTER_INGRESS' => '10G_TX_IN',
 	);
 
-    foreach my $datapath_name ( keys %stats ) {
+    foreach my $datapath_name ( sort keys %stats ) {
 	my %datapath = %{$stats{$datapath_name}};
 	my $datapath_shortname = $shortnames{$datapath_name} // $datapath_name;
-	foreach my $statgroup_name ( keys %datapath ) {
+	foreach my $statgroup_name ( sort keys %datapath ) {
 	    my %statgroup = %{$datapath{$statgroup_name}};
 	    next unless ( $statgroup_name ~~ @use_stats );
-	    foreach my $stat_name ( keys %statgroup ) {
+	    foreach my $stat_name ( sort keys %statgroup ) {
 		my $stat = $statgroup{$stat_name};
 		push @flags, "$datapath_shortname:$statgroup_name:$stat_name"
 		    if($stat);
