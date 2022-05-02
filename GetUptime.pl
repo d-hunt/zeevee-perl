@@ -13,6 +13,7 @@ use IO::File;
 
 # Indent fixed amount per level:
 $Data::Dumper::Indent = 1;
+$Data::Dumper::Sortkeys = 1;
 
 my $host = '172.16.1.90';
 my $port = 6970;

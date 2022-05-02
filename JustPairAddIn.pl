@@ -13,6 +13,10 @@ use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
+# Indent fixed amount per level:
+$Data::Dumper::Indent = 1;
+$Data::Dumper::Sortkeys = 1;
+
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
 my $host = '172.16.1.90';
