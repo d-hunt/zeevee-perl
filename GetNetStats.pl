@@ -7,6 +7,7 @@ no warnings 'experimental::smartmatch';
 use lib './lib';
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
+use ZeeVee::JSON_Bool;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep time/ );
 use IO::File;
@@ -43,16 +44,6 @@ foreach my $device_name (sort keys %device_ids) {
 }
 
 
-# Helper subroutine to convert JSON booleans to yes/no.
-sub JSON_bool_to_YN($) {
-    my $value = shift;
-    if( defined($value)
-        && JSON::is_bool($value) ) {
-        $value = ( $value ? 'YES' : 'NO' );
-    }
-    return $value;
-}
-
 # Start autoflushing STDOUT
 $| = 1;
 
@@ -60,17 +51,11 @@ $| = 1;
 foreach my $name (sort keys %devices) {
     my $device = $devices{$name};
     my %stats = $device->network_status_read();
+    ZeeVee::JSON_Bool::to_YN(\%stats);
+
 
     # $device->network_status_clear();
     # $device->network_status_select('all');
-
-    foreach my $datapath ( values %stats ) {
-        foreach my $statgroup ( values %{$datapath} ) {
-            foreach my $stat ( values %{$statgroup} ) {
-                $stat = JSON_bool_to_YN($stat);
-            }
-        }
-    }
 
     print Data::Dumper->Dump([\%stats], ["Device ".$name]);
 

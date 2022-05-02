@@ -9,6 +9,7 @@ use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
 use ZeeVee::DPGlueMCU;
+use ZeeVee::JSON_Bool;
 use Text::CSV;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep time/ );
@@ -46,16 +47,6 @@ foreach my $device_name (sort keys %device_ids) {
 }
 
 
-# Helper subroutine to convert JSON booleans to yes/no.
-sub JSON_bool_to_YN($) {
-    my $value = shift;
-    if( defined($value)
-	&& JSON::is_bool($value) ) {
-	$value = ( $value ? 'YES' : 'NO' );
-    }
-    return $value;
-}
-
 # Start autoflushing STDOUT
 $| = 1;
 
@@ -65,6 +56,7 @@ foreach my $name (sort keys %devices) {
     # my $hdmi_status = $device->hdmi_status();
     # my $monitor_status = $device->monitor_status();
     my @nodes = $device->get_node_by_type(".");
+    ZeeVee::JSON_Bool::to_YN(\@nodes);
 
     print Data::Dumper->Dump([\@nodes], ["Device ".$name]);
     print "\n"

@@ -43,16 +43,6 @@ foreach my $device_name (sort keys %device_ids) {
 }
 
 
-# Helper subroutine to convert JSON booleans to yes/no.
-sub JSON_bool_to_YN($) {
-    my $value = shift;
-    if( defined($value)
-	&& JSON::is_bool($value) ) {
-	$value = ( $value ? 'YES' : 'NO' );
-    }
-    return $value;
-}
-
 # Start autoflushing STDOUT
 $| = 1;
 

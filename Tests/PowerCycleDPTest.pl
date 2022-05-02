@@ -9,6 +9,7 @@ use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
 use ZeeVee::Apto_UART;
 use ZeeVee::WebPowerSwitch;
+use ZeeVee::JSON_Bool;
 use Text::CSV;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep time/ );
@@ -114,16 +115,6 @@ my @column_names = ( 'Epoch',
 $csv->column_names( \@column_names );
 $csv->print( $logfile, \@column_names );
 
-# Helper subroutine to convert JSON booleans to yes/no.
-sub JSON_bool_to_YN($) {
-    my $value = shift;
-    if( defined($value)
-	&& JSON::is_bool($value) ) {
-	$value = ( $value ? 'YES' : 'NO' );
-    }
-    return $value;
-}
-
 # Power off in preperation.
 print scalar localtime ."\t";
 print "Turning off Power.\n";
@@ -185,14 +176,14 @@ while(1) {
 		     'DeviceID' => $device->DeviceID(),
 		     'isConnected' => ( $device->is_connected() ? "YES" : "NO" ),
 		     'Temperature' => $device->__temperature(),
-		     'Source Stable' => JSON_bool_to_YN( $hdmi_status->{'source_stable'} ),
+		     'Source Stable' => ZeeVee::JSON_Bool::to_YN( $hdmi_status->{'source_stable'} ),
 		     'Video Width' => $hdmi_status->{'video'}->{'width'},
 		     'Video Height' => $hdmi_status->{'video'}->{'height'},
 		     'Video FPS' => $hdmi_status->{'video'}->{'frames_per_second'},
 		     'Video Scan Mode' => $hdmi_status->{'video'}->{'scan_mode'},
 		     'Video Color Space' => $hdmi_status->{'video'}->{'color_space'},
 		     'Video BPP' => $hdmi_status->{'video'}->{'bits_per_pixel'},
-		     'HDCP Protected' => JSON_bool_to_YN( $hdmi_status->{'hdcp_protected'} ),
+		     'HDCP Protected' => ZeeVee::JSON_Bool::to_YN( $hdmi_status->{'hdcp_protected'} ),
 		     'HDCP Version' => $hdmi_status->{'hdcp_version'},
 	    );
 
@@ -200,7 +191,7 @@ while(1) {
 	foreach my $key (keys %{$hdmi_status->{'video_details'}}) {
 	    my $value = $hdmi_status->{'video_details'}->{"$key"};
 	    if(JSON::is_bool($value)) {
-		$value = JSON_bool_to_YN( $value );
+		$value = ZeeVee::JSON_Bool::to_YN( $value );
 	    }
 	    $data{"VD $key"} = $value;
 	}
