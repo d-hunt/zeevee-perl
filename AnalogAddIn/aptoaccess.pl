@@ -16,7 +16,7 @@ use Time::HiRes ( qw/sleep/ );
 
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.90';
+my $host = '172.16.53.29';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
