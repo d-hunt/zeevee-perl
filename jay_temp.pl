@@ -4,16 +4,21 @@ use warnings;
 use strict;
 no warnings 'experimental::smartmatch';
 
-use lib './lib';
+use lib '.'; # Some platforms (Ubuntu) don't search current directory by default.
 use ZeeVee::Aptovision_API;
 use ZeeVee::BlueRiverDevice;
+use ZeeVee::Apto_UART;
+use ZeeVee::DPGlueMCU;
+use ZeeVee::STM32Bootloader;
 use Data::Dumper ();
 use Time::HiRes ( qw/sleep/ );
 use IO::Select;
 
-my $id_mode = "SINGLEDECODER"; # Set to: SINGLEDECODER, NEWDECODER, HARDCODED
-my $device_id = 'd880399acbf4';
-my $host = '172.16.1.90';
+my $id_mode = "HARDCODED"; # Set to: SINGLEDEVICE, NEWDEVICE, HARDCODED
+my $device_id = 'd880399b0e2e';
+#my $device_id = 'd88039eb6410';
+# my $host = '169.254.45.84';
+my $host = '172.16.51.242';
 my $port = 6970;
 my $timeout = 10;
 my $debug = 1;
@@ -28,10 +33,10 @@ my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 				       } );
 
 # Determine the decoder to use for this test.
-if( $id_mode eq "NEWDECODER" ) {
+if( $id_mode eq "NEWDEVICE" ) {
     print "Waiting for a new decoder device...\n";
     $device_id = $apto->wait_for_new_device("all_rx");
-} elsif ( $id_mode eq "SINGLEDECODER" ) {
+} elsif ( $id_mode eq "SINGLEDEVICE" ) {
     print "Looking for a single decoder.\n";
     $device_id = $apto->find_single_device("all_rx");
 } elsif ( $id_mode eq "HARDCODED" ) {
@@ -48,11 +53,17 @@ my $decoder = new ZeeVee::BlueRiverDevice( { DeviceID => $device_id,
 					     Debug => $debug,
 					   } );
 
-$decoder->leave();
-#$decoder->leave("HDMI");
-#$decoder->leave("HDMI_AUDIO");
-#$decoder->leave("AUDIO");
-#$decoder->leave("HDMI:0");
+#Temporary result values.
+my $result;
+my $expected;
+
+print "BlueRiver Device Die Temperature: "
+    .$decoder->temperature()
+    ."\n";
+
+print "BlueRiver Device HDMI Status: "
+    .Data::Dumper->Dump([$decoder->hdmi_status()], ["HDMI_Status"])
+    ."\n";
 
 print "=== DONE. DeviceID = ".$decoder->DeviceID()."===\n";
 
