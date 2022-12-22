@@ -2,7 +2,7 @@
 
 use warnings;
 use strict;
-use diagnostics;
+# use diagnostics;
 
 use lib '../lib';
 use ZeeVee::GSPI;
@@ -14,7 +14,7 @@ use ZeeVee::PCF8575;
 use ZeeVee::SPI_GPIO;
 use ZeeVee::SPIFlash;
 
-use Data::Dumper ();
+use Data::Dumper (qw/Dumper/);
 use Time::HiRes ( qw/sleep/ );
 
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
@@ -28,6 +28,7 @@ my $json_template = '/\{.*\}\n/';
 my @write_mask=[0,1,2,3,4,5,6,7,8,9,10];
 # File containing the GS12170 intial configuration
 my $filename = 'gs12170_config.txt';
+my $data_file = 'gs12170_data.txt';
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -126,17 +127,27 @@ my $hack_spi = new ZeeVee::SPI_GPIO( { GPIO => $expander,
 
 my $gspi_test = new ZeeVee::GSPI( { SPI => $hack_spi,
 				  FileName => $filename,
+				  DataFile => $data_file,
                   UnitAddress => 0x00,
 				  Debug => $debug,
                   Timeout => $timeout,
 				} );
 
-my $readreg = 0x007c;
+
+# $gspi_test->initialize_gs12170();
+
 my $data;
 my $poop;
-$data = ord($gspi_test->read_register($readreg));
-print "$data\n";
+my $butt;
+$poop = $gspi_test->read_register(0x007c);
+$butt = $gspi_test->SPI->SamplingStream();
+my $shit = $gspi_test->SPI->Stream();
 
+print"poop $poop\n";
+$data = ord($poop);
+print "data $data\n";
+my $hexy = sprintf("0x%X", $data);
+print "hexy $hexy\n";
 
 exit 0;
 
