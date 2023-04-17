@@ -18,7 +18,7 @@ use IO::Select;
 
 my $id_mode = "SINGLEENCODER"; # Set to: SINGLEENCODER, NEWENCODER, HARDCODED
 my $device_id = 'd880399acbf4';
-my $host = '172.16.1.90';
+my $host = '172.16.53.29';
 my $port = 6970;
 my $edid_filename = './zyper-vga-edid.bin';
 my $timeout = 10;

@@ -2,6 +2,7 @@
 
 use warnings;
 use strict;
+use Switch;
 # use diagnostics;
 
 use lib '../lib';
@@ -28,7 +29,6 @@ my $json_template = '/\{.*\}\n/';
 my @write_mask=[0,1,2,3,4,5,6,7,8,9,10];
 # File containing the GS12170 intial configuration
 my $filename = 'gs12170_config.txt';
-my $data_file = 'gs12170_data.txt';
 
 my $apto = new ZeeVee::Aptovision_API( { Timeout => $timeout,
 					 Host => $host,
@@ -124,31 +124,26 @@ my $hack_spi = new ZeeVee::SPI_GPIO( { GPIO => $expander,
 				  },
 				  Base => 0xffff
 				} );
-
-my $gspi_test = new ZeeVee::GSPI( { SPI => $hack_spi,
-				  FileName => $filename,
-				  DataFile => $data_file,
-                  UnitAddress => 0x00,
+my $gspi_gs12341 = new ZeeVee::GSPI( { SPI => $hack_spi,
+				  UnitAddress => 0x01,
 				  Debug => $debug,
-                  Timeout => $timeout,
+				  Timeout => $timeout,  
 				} );
 
 
-# $gspi_test->initialize_gs12170();
 
-my $data;
-my $poop;
-my $butt;
-$poop = $gspi_test->read_register(0x007c);
-$butt = $gspi_test->SPI->SamplingStream();
-my $shit = $gspi_test->SPI->Stream();
-
-print"poop $poop\n";
-$data = ord($poop);
-print "data $data\n";
-my $hexy = sprintf("0x%X", $data);
-print "hexy $hexy\n";
+# Read the Detected Rate register
+my $rate = ord($gspi_gs12341->read_register(0x0087)) & 0x7;
+switch($rate){
+	case 0 {print "Unlocked\n"}
+	case 1 {print "MADI (125 Mbps)\n"}
+	case 2 {print "SD (270 Mbps)\n"}
+	case 3 {print "HD (1.485 Gbps)\n"}
+	case 4 {print "3G\n"}
+	case 5 {print "6G\n"}
+	case 6 {print "12G\n"}
+	case 7 {print "Error\n"}
+}
 
 exit 0;
-
 __END__

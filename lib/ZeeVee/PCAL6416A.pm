@@ -1,5 +1,5 @@
 # Perl module for speaking to Aptovision API
-package ZeeVee::PCF8575;
+package ZeeVee::PCAL6416A;
 use Class::Accessor "antlers";
 
 use warnings;
@@ -10,18 +10,18 @@ has I2C => ( is => "ro" );
 has Address => ( is => "ro" );
 has Timeout => ( is => "ro" );
 has Debug => ( is => "ro" );
-has WriteMask => ( is => "rw" );
+has Outputs => ( is => "rw" );
 
-# Constructor for PCF8575 object.
+# Constructor for PCAL6416A object.
 sub new($\%) {
     my $class = shift;
     my $arg_ref = shift // {};
 
     unless( exists $arg_ref->{'I2C'} ) {
-	die "PCF8575 can't work without a I2C connection to device.  I2C object must provide i2c_raw method.";
+	die "PCAL6416A can't work without a I2C connection to device.  I2C object must provide i2c_raw method.";
     }
     unless( exists $arg_ref->{'Address'} ) {
-	die "PCF8575 can't work without an I2C slave address.";
+	die "PCAL6416A can't work without an I2C slave address.";
     }
     unless( exists $arg_ref->{'Timeout'} ) {
 	$arg_ref->{'Timeout'} = 10;
@@ -29,8 +29,8 @@ sub new($\%) {
     unless( exists $arg_ref->{'Debug'} ) {
 	$arg_ref->{'Debug'} = 0;
     }
-    unless( exists $arg_ref->{'WriteMask'} ) {
-	$arg_ref->{'WriteMask'} = [];
+    unless( exists $arg_ref->{'Outputs'} ) {
+	$arg_ref->{'Outputs'} = [];
     }
 
     my $self = $class->SUPER::new( $arg_ref );
@@ -40,28 +40,43 @@ sub new($\%) {
     return $self;
 }
 
-
 # Any initialization necessary.
 sub initialize($) {
     my $self = shift;
+    my $mask = 0xFFFF;
 
-    # Nothing so far.
+    foreach my $bit (@{$self->Outputs}) {
+        # Clear bits for output
+        $mask &= ~(1<<$bit);
+    }
+
+    # Configure I/O
+    $self->word_write(0x06, $mask);
 
     return;
 }
-
 
 sub read($) {
     my $self = shift;
 
     # Read GPIO back.
     my $i2c_state_ref =
-	$self->I2C->i2c_raw( {'Slave' => $self->Address(),
-			      'Commands' => [{ 'Command' => 'Read',
-					       'Length' => 2,
-					     },
-				  ],
-			     } );
+        $self->I2C->i2c_raw( 
+            { 
+                'Slave' => $self->Address(),
+			    'Commands' => [
+                    { 
+                        'Command' => 'Write',
+						'Data' => [0x00]
+					},
+					{ 
+                        'Command' => 'Read',
+						'Length' => 2
+					},
+				],
+			} 
+        );
+
     my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
     my @state = ();
     for( my $bit=0; $bit < 16; $bit++) {
@@ -71,8 +86,8 @@ sub read($) {
     return \@state;
 }
 
-
-# Writes to PCF875.  Reads back value.
+# Writes to PCAL6416A .  Reads back value written to register.
+# Need to perform read to read value back
 sub write($\@;) {
     my $self = shift;
     my $state_ref = shift;
@@ -81,10 +96,10 @@ sub write($\@;) {
     my @state = @{$state_ref};
     my $word = 0;
     for( my $bit=0; $bit < 16; $bit++) {
-	$word += $state[$bit] << $bit;
+	    $word += $state[$bit] << $bit;
     }
 
-    my $value = $self->word_write($word);
+    my $value = $self->word_write(0x02,$word);
     @state = ();
     for( my $bit=0; $bit < 16; $bit++) {
         $state[$bit] = (($value >> $bit) & 0x01);
@@ -93,31 +108,61 @@ sub write($\@;) {
     return \@state;
 }
 
-
-# Writes 16-bit word to PCF875.  Reads back value.
-sub word_write($$) {
+# Writes 16-bit word to PCAL6416A .  Reads back value.
+sub word_write($$$) {
     my $self = shift;
+    my $reg_byte = shift;
     my $word = shift;
 
     # User wants to set the GPIO.
-    # Apply mask. (1 is driven weak.)
-    foreach my $bit (@{$self->WriteMask}) {
-        $word |= (0x0001 << $bit);
-    }
     my $char_h = (($word >> 8) & 0xff);
     my $char_l = (($word >> 0) & 0xff);
 
     my $i2c_state_ref =
-        $self->I2C->i2c_raw( { 'Slave' => $self->Address(),
-			       'Commands' => [{ 'Command' => 'Write',
-						'Data' => [ $char_l,
-							    $char_h, ]
-					      },
-					      { 'Command' => 'Read',
+        $self->I2C->i2c_raw( 
+            { 
+                'Slave' => $self->Address(),
+			    'Commands' => [
+                    { 
+                        'Command' => 'Write',
+						'Data' => [ $reg_byte, $char_l, $char_h]
+					},
+					{ 
+                        'Command' => 'Read',
 						'Length' => 2,
-					      },
-				   ],
-			     } );
+					},
+				],
+			} 
+        );
+
+    # The read acts as a fence!
+
+    my $value = $i2c_state_ref->[0] | ($i2c_state_ref->[1] << 8);
+
+    return $value;
+}
+
+# Writes 16-bit word to PCAL6416A .  Reads back value.
+sub word_read($$) {
+    my $self = shift;
+    my $reg_byte = shift;
+
+    my $i2c_state_ref =
+        $self->I2C->i2c_raw( 
+            { 
+                'Slave' => $self->Address(),
+			    'Commands' => [
+                    { 
+                        'Command' => 'Write',
+						'Data' => [$reg_byte]
+					},
+					{ 
+                        'Command' => 'Read',
+						'Length' => 2,
+					},
+				],
+			} 
+        );
 
     # The read acts as a fence!
 
@@ -127,28 +172,21 @@ sub word_write($$) {
 }
 
 
-# Streams 16-bit words to PCF8575 as fast as possible.
+# Streams 16-bit words to PCAL6416A as fast as possible.
 sub stream_write($\@) {
     my $self = shift;
     my $stream_ref = shift;
     my $i2c_transaction = { 'Slave' => $self->Address() ,
-				'Commands' => [],
-                'Register' => 0x02 };
+				'Commands' => [] };
     my $commands = $i2c_transaction->{'Commands'};
-
-    # Calculate mask. (1 is driven weak.)
-    my $mask = 0;
-    foreach my $bit (@{$self->WriteMask}) {
-	$mask |= (1 << $bit);
-    }
 
     # Construct the I2C commands.
     {
 	my $page_size = 12;
 	my $current_command = undef;
 	foreach my $word (@{$stream_ref}) {
-	    my $char_h = ((($word | $mask) >> 8) & 0xff);
-	    my $char_l = ((($word | $mask) >> 0) & 0xff);
+	    my $char_h = (($word >> 8) & 0xff);
+	    my $char_l = (($word >> 0) & 0xff);
 
 	    if( !defined($current_command) ) {
 		# We need to set up a new write command
@@ -158,10 +196,10 @@ sub stream_write($\@) {
 		    push @{$commands}, $current_command;
 		}
 		$current_command = { 'Command' => 'Write',
-				     'Data' => [] };
+				    'Data' => [] };
 	    }
 
-	    push @{$current_command->{'Data'}}, ($char_l, $char_h);
+	    push @{$current_command->{'Data'}}, (0x02, $char_l, $char_h);
 
 	    if( scalar(@{$current_command->{'Data'}}) >= $page_size ) {
 		push @{$commands}, $current_command;
@@ -176,8 +214,15 @@ sub stream_write($\@) {
 	}
 
 	# The final read acts as a fence!
+    $current_command = { 'Command' => 'Write',
+			     'Data' => [0x00]
+                 };
+
+	push @{$commands}, $current_command;
+	$current_command = undef;
 	$current_command = { 'Command' => 'Read',
-			     'Length' => 2 };
+			     'Length' => 2};
+
 	push @{$commands}, $current_command;
 	$current_command = undef;
 

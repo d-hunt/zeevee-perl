@@ -97,7 +97,8 @@ sub send_receive($) {
     my @word_stream = ();
 
     foreach my $element (@{$self->Stream()}) {
-	my $ret_word = $self->GPIO->word_write($element);
+        $self->GPIO->word_write(0x02, $element);
+	    my $ret_word = $self->GPIO->word_read(0x00);
 	push @word_stream, $ret_word;
     }
 
